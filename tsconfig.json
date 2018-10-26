@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "es2017",
+        "module": "commonjs",
+        "lib": ["esnext"],
+        "outDir": "dist",
+        "rootDir": "src",
+        "experimentalDecorators": true,
+        "noEmitOnError": true,
+        "strict": true,
+        "skipLibCheck": true,
+        "sourceMap": true,
+        "stripInternal": true,
+        "declaration": true,
+        "declarationMap": true,
+        "noUnusedLocals": true,
+        "preserveConstEnums": true,
+    },
+    "include": [
+        "src/**/*.ts"
+    ]
+}
