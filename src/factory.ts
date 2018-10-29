@@ -1,160 +1,163 @@
-import { TokenNode, TokenKind, TextLiteralKind, TokenFlags, TextLiteralNode, Identifier, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause, OrderbyClause, OrderbyComparator, GroupClause, JoinClause, QueryExpression, ParenthesizedExpression, Elision, SpreadElement, ArrayLiteral, PropertyAssignment, ShorthandPropertyAssignment, ObjectLiteral, NewExpression, CallExpression, PropertyAccessExpression, ElementAccessExpression, PrefixUnaryExpression, PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause, Expression, isLeftHandSideExpressionOrHigher, ArrayLiteralElement, Argument, isMemberExpressionOrHigher, isAssignmentExpressionOrHigher, isUnaryExpressionOrHigher, BinaryPrecedence, getBinaryOperatorPrecedence, ArrowFunction, CommaListExpression, AssignmentExpressionOrHigher, Selector, SelectorKind } from "./types";
+import { TokenNode, TokenKind, TextLiteralKind, TokenFlags, TextLiteralNode, Identifier, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause, OrderbyClause, OrderbyComparator, GroupClause, JoinClause, QueryExpression, ParenthesizedExpression, Elision, SpreadElement, ArrayLiteral, PropertyAssignment, ShorthandPropertyAssignment, ObjectLiteral, NewExpression, CallExpression, PropertyAccessExpression, ElementAccessExpression, PrefixUnaryExpression, PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause, Expression, isLeftHandSideExpressionOrHigher, ArrayLiteralElement, Argument, isMemberExpressionOrHigher, isAssignmentExpressionOrHigher, isUnaryExpressionOrHigher, BinaryPrecedence, getBinaryOperatorPrecedence, ArrowFunction, CommaListExpression, AssignmentExpressionOrHigher, TextRange, Syntax } from "./types";
 import { visitList } from "./visitor";
+
+const noTextRange = createTextRange(0, 0);
+
+/** @internal */
+export function createTextRange(pos: number, end: number): TextRange {
+    return { pos, end };
+}
 
 /** @internal */
 export function createToken<Kind extends TokenKind>(kind: Kind): TokenNode<Kind> {
-    return { kind };
+    return { kind, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createTextLiteral<Kind extends TextLiteralKind>(kind: Kind, text: string, flags: TokenFlags): TextLiteralNode<Kind> {
-    return { kind, text, flags };
+    return { kind, text, flags, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createIdentifier(text: string): Identifier {
-    return { kind: SyntaxKind.Identifier, text };
+    return { kind: SyntaxKind.Identifier, text, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createComputedPropertyName(expression: Expression): ComputedPropertyName {
-    return { kind: SyntaxKind.ComputedPropertyName, expression: toAssignmentExpressionOrHigher(expression) };
+    return { kind: SyntaxKind.ComputedPropertyName, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
-export function createSelector(kind: SelectorKind): Selector {
-    return { kind };
-}
-
-/** @internal */
-export function createFromClause(outerClause: FromClause["outerClause"], name: FromClause["name"], selectorToken: FromClause["selectorToken"], expression: Expression): FromClause {
-    return { kind: SyntaxKind.FromClause, outerClause, name, selectorToken, expression: toAssignmentExpressionOrHigher(expression) };
+export function createFromClause(outerClause: FromClause["outerClause"], awaitKeyword: FromClause["awaitKeyword"], name: FromClause["name"], axisSelectorToken: FromClause["axisSelectorToken"], expression: Expression): FromClause {
+    return { kind: SyntaxKind.FromClause, outerClause, awaitKeyword, name, axisSelectorToken, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createLetClause(outerClause: LetClause["outerClause"], name: LetClause["name"], expression: Expression): LetClause {
-    return { kind: SyntaxKind.LetClause, outerClause, name, expression: toAssignmentExpressionOrHigher(expression) };
+    return { kind: SyntaxKind.LetClause, outerClause, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createWhereClause(outerClause: WhereClause["outerClause"], expression: Expression): WhereClause {
-    return { kind: SyntaxKind.WhereClause, outerClause, expression: toAssignmentExpressionOrHigher(expression) };
+    return { kind: SyntaxKind.WhereClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createOrderbyClause(outerClause: OrderbyClause["outerClause"], comparators: OrderbyClause["comparators"]): OrderbyClause {
-    return { kind: SyntaxKind.OrderbyClause, outerClause, comparators };
+    return { kind: SyntaxKind.OrderbyClause, outerClause, comparators, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createOrderbyComparator(expression: Expression, directionToken: OrderbyComparator["directionToken"], usingExpression: Expression | undefined): OrderbyComparator {
-    return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), directionToken, usingExpression: usingExpression && toAssignmentExpressionOrHigher(usingExpression) };
+    return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), directionToken, usingExpression: usingExpression && toAssignmentExpressionOrHigher(usingExpression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createGroupClause(outerClause: GroupClause["outerClause"], elementSelector: Expression, keySelector: Expression, intoName: GroupClause["intoName"]): GroupClause {
-    return { kind: SyntaxKind.GroupClause, outerClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), intoName };
+    return { kind: SyntaxKind.GroupClause, outerClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), intoName, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
-export function createJoinClause(outerClause: JoinClause["outerClause"], name: JoinClause["name"], selectorToken: JoinClause["selectorToken"], expression: Expression, outerSelector: Expression, innerSelector: Expression, intoName: JoinClause["intoName"]): JoinClause {
-    return { kind: SyntaxKind.JoinClause, outerClause, name, selectorToken, expression: toAssignmentExpressionOrHigher(expression), outerSelector: toAssignmentExpressionOrHigher(outerSelector), innerSelector: toAssignmentExpressionOrHigher(innerSelector), intoName };
+export function createJoinClause(outerClause: JoinClause["outerClause"], awaitKeyword: JoinClause["awaitKeyword"], name: JoinClause["name"], axisSelectorToken: JoinClause["axisSelectorToken"], expression: Expression, outerSelector: Expression, innerSelector: Expression, intoName: JoinClause["intoName"]): JoinClause {
+    return { kind: SyntaxKind.JoinClause, outerClause, awaitKeyword, name, axisSelectorToken, expression: toAssignmentExpressionOrHigher(expression), outerSelector: toAssignmentExpressionOrHigher(outerSelector), innerSelector: toAssignmentExpressionOrHigher(innerSelector), intoName, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
-export function createSelectClause(outerClause: SelectClause["outerClause"], selectorToken: SelectClause["selectorToken"], expression: Expression, intoName: SelectClause["intoName"]): SelectClause {
-    return { kind: SyntaxKind.SelectClause, outerClause, selectorToken, expression: toAssignmentExpressionOrHigher(expression), intoName };
+export function createSelectClause(outerClause: SelectClause["outerClause"], axisSelectorToken: SelectClause["axisSelectorToken"], expression: Expression, intoName: SelectClause["intoName"]): SelectClause {
+    return { kind: SyntaxKind.SelectClause, outerClause, axisSelectorToken, expression: toAssignmentExpressionOrHigher(expression), intoName, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createQueryExpression(query: QueryExpression["query"]): QueryExpression {
-    return { kind: SyntaxKind.QueryExpression, query };
+    return { kind: SyntaxKind.QueryExpression, query, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createParenthesizedExpression(expression: Expression): ParenthesizedExpression {
-    return { kind: SyntaxKind.ParenthesizedExpression, expression };
+    return { kind: SyntaxKind.ParenthesizedExpression, expression, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createElision(): Elision {
-    return { kind: SyntaxKind.Elision };
+    return { kind: SyntaxKind.Elision, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createSpreadElement(expression: Expression): SpreadElement {
-    return { kind: SyntaxKind.SpreadElement, expression: toAssignmentExpressionOrHigher(expression) };
+    return { kind: SyntaxKind.SpreadElement, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createArrayLiteral(elements: ReadonlyArray<Expression | Elision | SpreadElement>): ArrayLiteral {
-    return { kind: SyntaxKind.ArrayLiteral, elements: visitList(elements, toArrayLiteralElement) };
+    return { kind: SyntaxKind.ArrayLiteral, elements: visitList(elements, toArrayLiteralElement), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createPropertyAssignment(name: PropertyAssignment["name"], initializer: Expression): PropertyAssignment {
-    return { kind: SyntaxKind.PropertyAssignment, name, initializer: toAssignmentExpressionOrHigher(initializer) };
+    return { kind: SyntaxKind.PropertyAssignment, name, initializer: toAssignmentExpressionOrHigher(initializer), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createShorthandPropertyAssignment(name: ShorthandPropertyAssignment["name"]): ShorthandPropertyAssignment {
-    return { kind: SyntaxKind.ShorthandPropertyAssignment, name };
+    return { kind: SyntaxKind.ShorthandPropertyAssignment, name, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createObjectLiteral(properties: ObjectLiteral["properties"]): ObjectLiteral {
-    return { kind: SyntaxKind.ObjectLiteral, properties };
+    return { kind: SyntaxKind.ObjectLiteral, properties, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createNewExpression(expression: Expression, argumentList: ReadonlyArray<Expression | SpreadElement> | undefined): NewExpression {
-    return { kind: SyntaxKind.NewExpression, expression: toMemberExpressionOrHigher(expression), argumentList: visitList(argumentList, toArgument) };
+    return { kind: SyntaxKind.NewExpression, expression: toMemberExpressionOrHigher(expression), argumentList: visitList(argumentList, toArgument), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
-export function createCallExpression(expression: Expression, argumentList: ReadonlyArray<Expression | SpreadElement>): CallExpression {
-    return { kind: SyntaxKind.CallExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentList: visitList(argumentList, toArgument) };
+export function createCallExpression(expression: Expression | string, argumentList: ReadonlyArray<Expression | SpreadElement>): CallExpression {
+    if (typeof expression === "string") expression = Expr.id(expression);
+    return { kind: SyntaxKind.CallExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentList: visitList(argumentList, toArgument), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createPropertyAccessExpression(expression: Expression, name: PropertyAccessExpression["name"] | string): PropertyAccessExpression {
-    return { kind: SyntaxKind.PropertyAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), name: toIdentifier(name) };
+    return { kind: SyntaxKind.PropertyAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), name: toIdentifier(name), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createElementAccessExpression(expression: Expression, argumentExpression: ElementAccessExpression["argumentExpression"]): ElementAccessExpression {
-    return { kind: SyntaxKind.ElementAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentExpression };
+    return { kind: SyntaxKind.ElementAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentExpression, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createPrefixUnaryExpression(operatorToken: PrefixUnaryExpression["operatorToken"], expression: Expression): PrefixUnaryExpression {
-    return { kind: SyntaxKind.PrefixUnaryExpression, operatorToken, expression: toUnaryExpressionOrHigher(expression) };
+    return { kind: SyntaxKind.PrefixUnaryExpression, operatorToken, expression: toUnaryExpressionOrHigher(expression), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createPostfixUnaryExpression(expression: Expression, operatorToken: PostfixUnaryExpression["operatorToken"]): PostfixUnaryExpression {
-    return { kind: SyntaxKind.PostfixUnaryExpression, expression: toLeftHandSideExpressionOrHigher(expression), operatorToken };
+    return { kind: SyntaxKind.PostfixUnaryExpression, expression: toLeftHandSideExpressionOrHigher(expression), operatorToken, [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createBinaryExpression(left: Expression, operatorToken: BinaryExpression["operatorToken"], right: Expression): BinaryExpression {
     const precedence = getBinaryOperatorPrecedence(operatorToken.kind);
-    return { kind: SyntaxKind.BinaryExpression, left: toPrecedenceOrHigher(left, precedence), operatorToken, right: toPrecedenceOrHigher(right, precedence + 1) };
+    return { kind: SyntaxKind.BinaryExpression, left: toPrecedenceOrHigher(left, precedence), operatorToken, right: toPrecedenceOrHigher(right, precedence + 1), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createConditionalExpression(condition: Expression, whenTrue: Expression, whenFalse: Expression): ConditionalExpression {
-    return { kind: SyntaxKind.ConditionalExpression, condition: toPrecedenceOrHigher(condition, BinaryPrecedence.LogicalORExpression), whenTrue: toAssignmentExpressionOrHigher(whenTrue), whenFalse: toAssignmentExpressionOrHigher(whenFalse) };
+    return { kind: SyntaxKind.ConditionalExpression, condition: toPrecedenceOrHigher(condition, BinaryPrecedence.LogicalORExpression), whenTrue: toAssignmentExpressionOrHigher(whenTrue), whenFalse: toAssignmentExpressionOrHigher(whenFalse), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
-export function createArrowFunction(parameterList: ReadonlyArray<Identifier>, body: Expression): ArrowFunction {
-    return { kind: SyntaxKind.ArrowFunction, parameterList, body: toArrowBody(body) };
+export function createArrowFunction(asyncKeyword: ArrowFunction["asyncKeyword"], parameterList: ReadonlyArray<Identifier>, body: Expression): ArrowFunction {
+    return { kind: SyntaxKind.ArrowFunction, asyncKeyword, parameterList, body: toArrowBody(body), [Syntax.location]: noTextRange };
 }
 
 /** @internal */
 export function createCommaListExpression(expressions: ReadonlyArray<Expression>): CommaListExpression {
-    return { kind: SyntaxKind.CommaListExpression, expressions: visitList(expressions, toAssignmentExpressionOrHigher) };
+    return { kind: SyntaxKind.CommaListExpression, expressions: visitList(expressions, toAssignmentExpressionOrHigher), [Syntax.location]: noTextRange };
 }
 
 function leftMost(node: Expression): Expression {

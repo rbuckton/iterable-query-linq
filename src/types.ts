@@ -132,16 +132,16 @@ export const enum SyntaxKind {
     ColonToken,
 
     // Selectors
-    RootSelector, // root::
-    ParentSelector, // parent::
-    ChildSelector, // child::
-    AncestorSelector, // ancestor::
-    AncestorOrSelfSelector, // ancestor-or-self::
-    DescendantSelector, // descendant::
-    DescendantOrSelfSelector, // descendant-or-self::
-    SelfSelector, // self::
-    SiblingSelector, // sibling::
-    SiblingOrSelfSelector, // sibling-or-self::
+    RootAxisSelector, // root::
+    ParentAxisSelector, // parent::
+    ChildAxisSelector, // child::
+    AncestorAxisSelector, // ancestor::
+    AncestorOrSelfAxisSelector, // ancestor-or-self::
+    DescendantAxisSelector, // descendant::
+    DescendantOrSelfAxisSelector, // descendant-or-self::
+    SelfAxisSelector, // self::
+    SiblingAxisSelector, // sibling::
+    SiblingOrSelfAxisSelector, // sibling-or-self::
 
     // Names
     Identifier,
@@ -525,6 +525,7 @@ export type PrefixUnaryOperatorKind =
     | SyntaxKind.TildeToken
     | SyntaxKind.TypeofKeyword
     | SyntaxKind.VoidKeyword
+    | SyntaxKind.AwaitKeyword
     | SyntaxKind.DeleteKeyword;
 
 /** @internal */
@@ -539,6 +540,7 @@ export function isPrefixUnaryOperatorKind(kind: SyntaxKind): kind is PrefixUnary
         case SyntaxKind.TypeofKeyword:
         case SyntaxKind.VoidKeyword:
         case SyntaxKind.DeleteKeyword:
+        case SyntaxKind.AwaitKeyword:
             return true;
         default:
             return false;
@@ -607,31 +609,31 @@ export function isPunctuationKind(kind: SyntaxKind): kind is PunctuationKind {
 }
 
 /** @internal */
-export type SelectorKind =
-    | SyntaxKind.RootSelector
-    | SyntaxKind.ParentSelector
-    | SyntaxKind.ChildSelector
-    | SyntaxKind.AncestorSelector
-    | SyntaxKind.AncestorOrSelfSelector
-    | SyntaxKind.DescendantSelector
-    | SyntaxKind.DescendantOrSelfSelector
-    | SyntaxKind.SelfSelector
-    | SyntaxKind.SiblingSelector
-    | SyntaxKind.SiblingOrSelfSelector;
+export type AxisSelectorKind =
+    | SyntaxKind.RootAxisSelector
+    | SyntaxKind.ParentAxisSelector
+    | SyntaxKind.ChildAxisSelector
+    | SyntaxKind.AncestorAxisSelector
+    | SyntaxKind.AncestorOrSelfAxisSelector
+    | SyntaxKind.DescendantAxisSelector
+    | SyntaxKind.DescendantOrSelfAxisSelector
+    | SyntaxKind.SelfAxisSelector
+    | SyntaxKind.SiblingAxisSelector
+    | SyntaxKind.SiblingOrSelfAxisSelector;
 
 /** @internal */
-export function isSelectorKind(kind: SyntaxKind): kind is SelectorKind {
+export function isAxisSelectorKind(kind: SyntaxKind): kind is AxisSelectorKind {
     switch (kind) {
-        case SyntaxKind.RootSelector:
-        case SyntaxKind.ParentSelector:
-        case SyntaxKind.ChildSelector:
-        case SyntaxKind.AncestorSelector:
-        case SyntaxKind.AncestorOrSelfSelector:
-        case SyntaxKind.DescendantSelector:
-        case SyntaxKind.DescendantOrSelfSelector:
-        case SyntaxKind.SelfSelector:
-        case SyntaxKind.SiblingSelector:
-        case SyntaxKind.SiblingOrSelfSelector:
+        case SyntaxKind.RootAxisSelector:
+        case SyntaxKind.ParentAxisSelector:
+        case SyntaxKind.ChildAxisSelector:
+        case SyntaxKind.AncestorAxisSelector:
+        case SyntaxKind.AncestorOrSelfAxisSelector:
+        case SyntaxKind.DescendantAxisSelector:
+        case SyntaxKind.DescendantOrSelfAxisSelector:
+        case SyntaxKind.SelfAxisSelector:
+        case SyntaxKind.SiblingAxisSelector:
+        case SyntaxKind.SiblingOrSelfAxisSelector:
             return true;
         default:
             return false;
@@ -643,7 +645,7 @@ export type TokenKind =
     | SyntaxKind.EndOfFileToken
     | KeywordKind
     | PunctuationKind
-    | SelectorKind;
+    | AxisSelectorKind;
 
 /** @internal */
 export function isTokenKind(kind: SyntaxKind): kind is TokenKind {
@@ -677,7 +679,27 @@ export interface TextRange {
 }
 
 /** @internal */
-export interface TokenNode<Kind extends TokenKind> {
+export interface Syntax {
+    [Syntax.location]: TextRange;
+}
+
+/** @internal */
+export namespace Syntax {
+    export const location = Symbol("Syntax.location");
+}
+
+/** @internal */
+export function getPos(node: Node) {
+    return node[Syntax.location].pos;
+}
+
+/** @internal */
+export function getEnd(node: Node) {
+    return node[Syntax.location].end;
+}
+
+/** @internal */
+export interface TokenNode<Kind extends TokenKind> extends Syntax {
     readonly kind: Kind;
 }
 
@@ -690,19 +712,19 @@ export function isToken(node: Node): node is Token {
 }
 
 /** @internal */
-export interface Identifier {
+export interface Identifier extends Syntax {
     readonly kind: SyntaxKind.Identifier;
     readonly text: string;
 }
 
 /** @internal */
-export interface ComputedPropertyName {
+export interface ComputedPropertyName extends Syntax {
     readonly kind: SyntaxKind.ComputedPropertyName;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
 /** @internal */
-export interface TextLiteralNode<Kind extends TextLiteralKind> {
+export interface TextLiteralNode<Kind extends TextLiteralKind> extends Syntax {
     readonly kind: Kind;
     readonly text: string;
     readonly flags: TokenFlags;
@@ -755,7 +777,7 @@ export function isLiteral(node: Node): node is Literal {
 }
 
 /** @internal */
-export type Selector = TokenNode<SelectorKind>;
+export type AxisSelector = TokenNode<AxisSelectorKind>;
 
 /** @internal */
 export type MemberName =
@@ -781,20 +803,20 @@ export function isMemberName(node: Node): node is MemberName {
 export type ThisExpression = TokenNode<SyntaxKind.ThisKeyword>;
 
 /** @internal */
-export interface SpreadElement {
+export interface SpreadElement extends Syntax {
     readonly kind: SyntaxKind.SpreadElement;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
 /** @internal */
-export interface PropertyAssignment {
+export interface PropertyAssignment extends Syntax {
     readonly kind: SyntaxKind.PropertyAssignment;
     readonly name: MemberName;
     readonly initializer: AssignmentExpressionOrHigher;
 }
 
 /** @internal */
-export interface ShorthandPropertyAssignment {
+export interface ShorthandPropertyAssignment extends Syntax {
     readonly kind: SyntaxKind.ShorthandPropertyAssignment;
     readonly name: Identifier;
 }
@@ -818,13 +840,13 @@ export function isObjecLiteralElement(node: Node): node is ObjectLiteralElement 
 }
 
 /** @internal */
-export interface ObjectLiteral {
+export interface ObjectLiteral extends Syntax {
     readonly kind: SyntaxKind.ObjectLiteral;
     readonly properties: ReadonlyArray<ObjectLiteralElement>;
 }
 
 /** @internal */
-export interface Elision {
+export interface Elision extends Syntax {
     readonly kind: SyntaxKind.Elision;
 }
 
@@ -846,13 +868,13 @@ export function isArrayLiteralElement(node: Node): node is ArrayLiteralElement {
 }
 
 /** @internal */
-export interface ArrayLiteral {
+export interface ArrayLiteral extends Syntax {
     readonly kind: SyntaxKind.ArrayLiteral;
     readonly elements: ReadonlyArray<ArrayLiteralElement>;
 }
 
 /** @internal */
-export interface ParenthesizedExpression {
+export interface ParenthesizedExpression extends Syntax {
     readonly kind: SyntaxKind.ParenthesizedExpression;
     readonly expression: Expression;
 }
@@ -884,14 +906,14 @@ export function isPrimaryExpression(node: Node): node is PrimaryExpression {
 }
 
 /** @internal */
-export interface PropertyAccessExpression {
+export interface PropertyAccessExpression extends Syntax {
     readonly kind: SyntaxKind.PropertyAccessExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
     readonly name: Identifier;
 }
 
 /** @internal */
-export interface ElementAccessExpression {
+export interface ElementAccessExpression extends Syntax {
     readonly kind: SyntaxKind.ElementAccessExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
     readonly argumentExpression: Expression;
@@ -903,7 +925,7 @@ export type Argument =
     | SpreadElement;
 
 /** @internal */
-export interface NewExpression {
+export interface NewExpression extends Syntax {
     readonly kind: SyntaxKind.NewExpression;
     readonly expression: MemberExpressionOrHigher;
     readonly argumentList: ReadonlyArray<Argument> | undefined;
@@ -929,7 +951,7 @@ export function isMemberExpressionOrHigher(node: Node): node is MemberExpression
 }
 
 /** @internal */
-export interface CallExpression {
+export interface CallExpression extends Syntax {
     readonly kind: SyntaxKind.CallExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
     readonly argumentList: ReadonlyArray<Argument>;
@@ -951,14 +973,14 @@ export function isLeftHandSideExpressionOrHigher(node: Node): node is LeftHandSi
 }
 
 /** @internal */
-export interface PrefixUnaryExpression {
+export interface PrefixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PrefixUnaryExpression;
     readonly operatorToken: TokenNode<PrefixUnaryOperatorKind>;
     readonly expression: UnaryExpressionOrHigher;
 }
 
 /** @internal */
-export interface PostfixUnaryExpression {
+export interface PostfixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PostfixUnaryExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
     readonly operatorToken: TokenNode<PrefixUnaryOperatorKind>;
@@ -1077,7 +1099,7 @@ export function getBinaryOperatorPrecedence(kind: SyntaxKind): BinaryPrecedence 
 }
 
 /** @internal */
-export interface BinaryExpression {
+export interface BinaryExpression extends Syntax {
     readonly kind: SyntaxKind.BinaryExpression;
     readonly left: AssignmentExpressionOrHigher;
     readonly operatorToken: TokenNode<BinaryOperatorKind>;
@@ -1085,7 +1107,7 @@ export interface BinaryExpression {
 }
 
 /** @internal */
-export interface ConditionalExpression {
+export interface ConditionalExpression extends Syntax {
     readonly kind: SyntaxKind.ConditionalExpression;
     readonly condition: Expression;
     readonly whenTrue: AssignmentExpressionOrHigher;
@@ -1093,14 +1115,15 @@ export interface ConditionalExpression {
 }
 
 /** @internal */
-export interface QueryExpression {
+export interface QueryExpression extends Syntax {
     readonly kind: SyntaxKind.QueryExpression;
     readonly query: SelectClause | GroupClause;
 }
 
 /** @internal */
-export interface ArrowFunction {
+export interface ArrowFunction extends Syntax {
     readonly kind: SyntaxKind.ArrowFunction;
+    readonly asyncKeyword: TokenNode<SyntaxKind.AsyncKeyword> | undefined;
     readonly parameterList: ReadonlyArray<Identifier>;
     readonly body: AssignmentExpressionOrHigher;
 }
@@ -1127,7 +1150,7 @@ export function isAssignmentExpressionOrHigher(node: Node): node is AssignmentEx
 }
 
 /** @internal */
-export interface CommaListExpression {
+export interface CommaListExpression extends Syntax {
     readonly kind: SyntaxKind.CommaListExpression;
     readonly expressions: ReadonlyArray<AssignmentExpressionOrHigher>;
 }
@@ -1148,16 +1171,17 @@ export function isExpression(node: Node): node is Expression {
 }
 
 /** @internal */
-export interface FromClause {
+export interface FromClause extends Syntax {
     readonly kind: SyntaxKind.FromClause;
     readonly outerClause: Clause | undefined;
+    readonly awaitKeyword: TokenNode<SyntaxKind.AwaitKeyword> | undefined;
     readonly name: Identifier;
-    readonly selectorToken: Selector | undefined;
+    readonly axisSelectorToken: AxisSelector | undefined;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
 /** @internal */
-export interface LetClause {
+export interface LetClause extends Syntax {
     readonly kind: SyntaxKind.LetClause;
     readonly outerClause: Clause;
     readonly name: Identifier;
@@ -1165,21 +1189,21 @@ export interface LetClause {
 }
 
 /** @internal */
-export interface WhereClause {
+export interface WhereClause extends Syntax {
     readonly kind: SyntaxKind.WhereClause;
     readonly outerClause: Clause;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
 /** @internal */
-export interface OrderbyClause {
+export interface OrderbyClause extends Syntax {
     readonly kind: SyntaxKind.OrderbyClause;
     readonly outerClause: Clause;
     readonly comparators: ReadonlyArray<OrderbyComparator>;
 }
 
 /** @internal */
-export interface OrderbyComparator {
+export interface OrderbyComparator extends Syntax {
     readonly kind: SyntaxKind.OrderbyComparator;
     readonly expression: AssignmentExpressionOrHigher;
     readonly directionToken: TokenNode<SyntaxKind.AscendingKeyword> | TokenNode<SyntaxKind.DescendingKeyword> | undefined;
@@ -1187,7 +1211,7 @@ export interface OrderbyComparator {
 }
 
 /** @internal */
-export interface GroupClause {
+export interface GroupClause extends Syntax {
     readonly kind: SyntaxKind.GroupClause;
     readonly outerClause: Clause;
     readonly elementSelector: AssignmentExpressionOrHigher;
@@ -1196,11 +1220,12 @@ export interface GroupClause {
 }
 
 /** @internal */
-export interface JoinClause {
+export interface JoinClause extends Syntax {
     readonly kind: SyntaxKind.JoinClause;
     readonly outerClause: Clause;
+    readonly awaitKeyword: TokenNode<SyntaxKind.AwaitKeyword> | undefined;
     readonly name: Identifier;
-    readonly selectorToken: Selector | undefined;
+    readonly axisSelectorToken: AxisSelector | undefined;
     readonly expression: AssignmentExpressionOrHigher;
     readonly outerSelector: AssignmentExpressionOrHigher;
     readonly innerSelector: AssignmentExpressionOrHigher;
@@ -1208,10 +1233,10 @@ export interface JoinClause {
 }
 
 /** @internal */
-export interface SelectClause {
+export interface SelectClause extends Syntax {
     readonly kind: SyntaxKind.SelectClause;
     readonly outerClause: Clause;
-    readonly selectorToken: Selector | undefined;
+    readonly axisSelectorToken: AxisSelector | undefined;
     readonly expression: AssignmentExpressionOrHigher;
     readonly intoName: Identifier | undefined;
 }

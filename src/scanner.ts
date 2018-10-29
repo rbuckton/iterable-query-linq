@@ -17,7 +17,7 @@ const octalDigitsPattern = String.raw`0o[0-7]+`;
 const octalDigitsIndex = 7;
 const binaryDigitsPattern = String.raw`0b[01]+`;
 const binaryDigitsIndex = 8;
-const identifierPattern = String.raw`[a-zA-z_$][a-zA-z_$\d]*`;
+const identifierPattern = String.raw`[a-zA-Z_$][a-zA-Z_$\d]*`;
 const identifierIndex = 9;
 const identifierRegExp = new RegExp(`^${identifierPattern}$`);
 const whitespacePattern = String.raw`[\s\r\n]+`;
@@ -30,8 +30,8 @@ const regExpRegExp = /\/((?:[^\/]|\\\/)+(\/[a-zA-Z]*)?)?/g;
 const stringRegExp = /'(?:[^']|\\')+'|"(?:[^"]|\\")+"/;
 
 const stringToTokenMap: Record<string, TokenKind> = {
-    "ancestor::": SyntaxKind.AncestorSelector,
-    "ancestor-or-self::": SyntaxKind.AncestorOrSelfSelector,
+    "ancestor::": SyntaxKind.AncestorAxisSelector,
+    "ancestor-or-self::": SyntaxKind.AncestorOrSelfAxisSelector,
     "ascending": SyntaxKind.AscendingKeyword,
     "async": SyntaxKind.AsyncKeyword,
     "await": SyntaxKind.AwaitKeyword,
@@ -39,15 +39,15 @@ const stringToTokenMap: Record<string, TokenKind> = {
     "by": SyntaxKind.ByKeyword,
     "case": SyntaxKind.CaseKeyword,
     "catch": SyntaxKind.CatchKeyword,
-    "child::": SyntaxKind.ChildSelector,
+    "child::": SyntaxKind.ChildAxisSelector,
     "class": SyntaxKind.ClassKeyword,
     "const": SyntaxKind.ConstKeyword,
     "continue": SyntaxKind.ContinueKeyword,
     "debugger": SyntaxKind.DebuggerKeyword,
     "default": SyntaxKind.DefaultKeyword,
     "delete": SyntaxKind.DeleteKeyword,
-    "descendant::": SyntaxKind.DescendantSelector,
-    "descendant-or-self::": SyntaxKind.DescendantOrSelfSelector,
+    "descendant::": SyntaxKind.DescendantAxisSelector,
+    "descendant-or-self::": SyntaxKind.DescendantOrSelfAxisSelector,
     "descending": SyntaxKind.DescendingKeyword,
     "do": SyntaxKind.DoKeyword,
     "else": SyntaxKind.ElseKeyword,
@@ -76,15 +76,15 @@ const stringToTokenMap: Record<string, TokenKind> = {
     "on": SyntaxKind.OnKeyword,
     "orderby": SyntaxKind.OrderbyKeyword,
     "package": SyntaxKind.PackageKeyword,
-    "parent::": SyntaxKind.ParentSelector,
+    "parent::": SyntaxKind.ParentAxisSelector,
     "private": SyntaxKind.PrivateKeyword,
     "protected": SyntaxKind.ProtectedKeyword,
     "public": SyntaxKind.PublicKeyword,
     "return": SyntaxKind.ReturnKeyword,
-    "root::": SyntaxKind.RootSelector,
+    "root::": SyntaxKind.RootAxisSelector,
     "select": SyntaxKind.SelectKeyword,
-    "self::": SyntaxKind.SelfSelector,
-    "sibling::": SyntaxKind.SiblingSelector,
+    "self::": SyntaxKind.SelfAxisSelector,
+    "sibling::": SyntaxKind.SiblingAxisSelector,
     "static": SyntaxKind.StaticKeyword,
     "super": SyntaxKind.SuperKeyword,
     "switch": SyntaxKind.SwitchKeyword,
@@ -188,7 +188,6 @@ export class Scanner {
     private _pos = 0;
     private _startPos = 0;
     private _token = SyntaxKind.Unknown;
-    private _tokenValue = "";
     private _tokenPos = 0;
     private _tokenFlags = TokenFlags.None;
 
@@ -205,6 +204,13 @@ export class Scanner {
     tokenPos() { return this._tokenPos; }
     tokenText() { return this._text.slice(this._tokenPos, this._pos); }
     tokenFlags() { return this._tokenFlags; }
+    setTextPos(pos: number) {
+        this._pos = pos;
+        this._startPos = 0;
+        this._token = SyntaxKind.Unknown;
+        this._tokenPos = 0;
+        this._tokenFlags = TokenFlags.None;
+    }
 
     reset() {
         this._pos = 0;
@@ -218,7 +224,6 @@ export class Scanner {
     scan() {
         this._startPos = this._pos;
         this._tokenFlags = TokenFlags.None;
-        this._tokenValue = "";
         while (true) {
             this._tokenPos = this._pos;
             if (this._pos >= this._text.length) return this._token = SyntaxKind.EndOfFileToken;
@@ -226,7 +231,7 @@ export class Scanner {
             const match = this._tokenizer.exec(this._text)!;
             this._pos = this._tokenizer.lastIndex === -1 ? this._text.length : this._tokenizer.lastIndex;
             if (match[whitespaceIndex]) continue;
-            if (match[selectorIndex]) return this._tokenValue = match[selectorIndex] + "::", this._token = stringToTokenMap[this._tokenValue];
+            if (match[selectorIndex]) return this._token = stringToTokenMap[match[selectorIndex] + "::"];
             if (match[keywordIndex]) return this._token = stringToTokenMap[match[keywordIndex]];
             if (match[operatorIndex]) return this._token = stringToTokenMap[match[operatorIndex]];
             if (match[stringIndex]) {
@@ -258,13 +263,18 @@ export class Scanner {
         const savedToken = this._token;
         const savedTokenPos = this._tokenPos;
         const savedTokenFlags = this._tokenFlags;
-        const result = callback();
-        if (lookahead || !result) {
-            this._pos = savedPos;
-            this._startPos = savedStartPos;
-            this._token = savedToken;
-            this._tokenPos = savedTokenPos;
-            this._tokenFlags = savedTokenFlags;
+        let result: T | undefined;
+        try {
+            result = callback();
+        }
+        finally {
+            if (lookahead || !result) {
+                this._pos = savedPos;
+                this._startPos = savedStartPos;
+                this._token = savedToken;
+                this._tokenPos = savedTokenPos;
+                this._tokenFlags = savedTokenFlags;
+            }
         }
         return result;
     }

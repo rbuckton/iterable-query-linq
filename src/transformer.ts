@@ -1,6 +1,7 @@
-import { FromClause, LetClause, WhereClause, OrderbyClause, GroupClause, JoinClause, SelectClause, Clause, SyntaxKind, Expression, QueryExpression, BinaryExpression, ConditionalExpression, PrefixUnaryExpression, PostfixUnaryExpression, ArrowFunction, PropertyAccessExpression, ElementAccessExpression, ObjectLiteral, ArrayLiteral, PropertyAssignment, ObjectLiteralElement, SpreadElement, ArrayLiteralElement, MemberName, ComputedPropertyName, Identifier, OrderbyComparator, CommaListExpression, ParenthesizedExpression, NewExpression, CallExpression, Argument, ShorthandPropertyAssignment, Selector } from "./types";
+import { FromClause, LetClause, WhereClause, OrderbyClause, GroupClause, JoinClause, SelectClause, Clause, SyntaxKind, Expression, QueryExpression, BinaryExpression, ConditionalExpression, PrefixUnaryExpression, PostfixUnaryExpression, ArrowFunction, PropertyAccessExpression, ElementAccessExpression, ObjectLiteral, ArrayLiteral, PropertyAssignment, ObjectLiteralElement, SpreadElement, ArrayLiteralElement, MemberName, ComputedPropertyName, Identifier, OrderbyComparator, CommaListExpression, ParenthesizedExpression, NewExpression, CallExpression, Argument, ShorthandPropertyAssignment, AxisSelector } from "./types";
 import { Expr } from "./factory";
 import { visitList } from "./visitor";
+import { OrderedHierarchyQuery } from "iterable-query/dist/lib";
 
 /*
     > from user in users
@@ -116,13 +117,10 @@ function bindingsObject(bindings: Identifier | ReadonlyArray<Identifier>, name: 
     return Expr.object(properties);
 }
 
-function fn(name: string) {
-    return Expr.propertyAccess(Expr.id("$fn"), name);
-}
-
 interface QueryContext {
     bindings: Identifier | ReadonlyArray<Identifier>;
     expression: Expression;
+    async: boolean;
 }
 
 /** @internal */
@@ -134,48 +132,40 @@ export class Visitor {
     }
 
     private visitFromClause(node: FromClause): QueryContext {
-        const context = node.outerClause && this.visitClause(node.outerClause);
+        const async = !!node.awaitKeyword;
+        const context = asAsyncContextIfNeeded(node.outerClause && this.visitClause(node.outerClause), async);
+        const bindings = context ? bindName(node.name, context.bindings) : node.name;
+        let expression = this.visitExpressionWithContext(node.expression, context);
+        expression = asQuery(expression, async);
+        expression = callTraversalMethod(expression, node.axisSelectorToken);
         if (context) {
-            const bindings = bindName(node.name, context.bindings);
-            const expression = Expr.call(
-                fn("selectMany"),
-                [
-                    context.expression,
-                    Expr.arrow([bindingArgument(context.bindings)], withTraversal(this.visitExpressionWithContext(node.expression, context), node.selectorToken)),
-                    Expr.arrow([bindingArgument(context.bindings), node.name], bindingsObject(context.bindings, node.name))
-                ]
-            )
-            return { bindings, expression };
+            if (async && !context.async) context.expression = asQuery(context.expression, true);
+            expression = callQueryMethod(context.expression, "selectMany", [
+                Expr.arrow(undefined, [bindingArgument(context.bindings)], expression),
+                Expr.arrow(async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [bindingArgument(context.bindings), node.name], bindingsObject(context.bindings, node.name))
+            ]);
         }
-        const bindings = node.name;
-        const expression = withTraversal(this.visitExpression(node.expression), node.selectorToken);
-        return { bindings, expression };
+        return { bindings, expression, async: async || !!context && context.async };
     }
 
     private visitLetClause(node: LetClause): QueryContext {
         const context = this.visitClause(node.outerClause);
         const bindings = bindName(node.name, context.bindings);
-        const expression = Expr.call(
-            fn("select"),
-            [
-                context.expression,
-                Expr.arrow([bindingArgument(context.bindings)], bindingsObject(context.bindings, node.name, this.visitExpressionWithContext(node.expression, context)))
-            ]
-        );
-        return { bindings, expression };
+        let expression = this.visitExpressionWithContext(node.expression, context);
+        expression = callQueryMethod(context.expression, "select", [
+            Expr.arrow(context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [bindingArgument(context.bindings)], bindingsObject(context.bindings, node.name, expression))
+        ]);
+        return { bindings, expression, async: context.async };
     }
 
     private visitWhereClause(node: WhereClause): QueryContext {
         const context = this.visitClause(node.outerClause);
         const bindings = context.bindings;
-        const expression = Expr.call(
-            fn("where"),
-            [
-                context.expression,
-                Expr.arrow([bindingArgument(context.bindings)], this.visitExpressionWithContext(node.expression, context))
-            ]
-        );
-        return { bindings, expression };
+        let expression = this.visitExpressionWithContext(node.expression, context);
+        expression = callQueryMethod(context.expression, "where", [
+            Expr.arrow(context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [bindingArgument(context.bindings)], expression)
+        ]);
+        return { bindings, expression, async: context.async };
     }
 
     private visitOrderbyClause(node: OrderbyClause): QueryContext {
@@ -184,17 +174,17 @@ export class Visitor {
         let expression = context.expression;
         let first = true;
         for (const comparator of node.comparators) {
-            expression = Expr.call(
-                fn(`${first ? "order" : "then"}By${isDescending(comparator) ? "Descending": ""}`),
-                [
-                    expression,
-                    Expr.arrow([bindingArgument(context.bindings)], this.visitExpressionWithContext(comparator.expression, context)),
-                    ...(comparator.usingExpression ? [this.visitExpression(comparator.usingExpression) ] : [])
-                ]
-            );
+            const methodName =
+                first
+                    ? isDescending(comparator) ? "orderByDescending" : "orderBy"
+                    : isDescending(comparator) ? "thenByDescending" : "thenBy";
+            expression = callQueryMethod(expression, methodName, [
+                Expr.arrow(undefined, [bindingArgument(context.bindings)], this.visitExpressionWithContext(comparator.expression, context)),
+                ...(comparator.usingExpression ? [this.visitExpression(comparator.usingExpression) ] : [])
+            ]);
             first = false;
         }
-        return { bindings, expression };
+        return { bindings, expression, async: context.async };
 
         function isDescending(comparator: OrderbyComparator) {
             return comparator.directionToken !== undefined
@@ -205,47 +195,40 @@ export class Visitor {
     private visitGroupClause(node: GroupClause): QueryContext {
         const context = this.visitClause(node.outerClause);
         const bindings = node.intoName ? node.intoName : context.bindings;
-        const expression = Expr.call(
-            fn("groupBy"),
-            [
-                context.expression,
-                Expr.arrow([bindingArgument(context.bindings)], this.visitExpressionWithContext(node.keySelector, context)),
-                Expr.arrow([bindingArgument(context.bindings)], this.visitExpressionWithContext(node.elementSelector, context))
-            ]
-        )
-        return { bindings, expression };
+        const expression = callQueryMethod(context.expression, "groupBy", [
+            Expr.arrow(undefined, [bindingArgument(context.bindings)], this.visitExpressionWithContext(node.keySelector, context)),
+            Expr.arrow(context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [bindingArgument(context.bindings)], this.visitExpressionWithContext(node.elementSelector, context))
+        ]);
+        return { bindings, expression, async: context.async };
     }
 
     private visitJoinClause(node: JoinClause): QueryContext {
-        const context = this.visitClause(node.outerClause);
+        const async = !!node.awaitKeyword;
+        const context = asAsyncContextIfNeeded(this.visitClause(node.outerClause), async);
         const bindings = bindName(node.intoName || node.name, context.bindings);
-        const expression = Expr.call(
-            fn(node.intoName ? "groupJoin" : "join"),
-            [
-                context.expression,
-                withTraversal(this.visitExpressionWithContext(node.expression, context), node.selectorToken),
-                Expr.arrow([bindingArgument(context.bindings)], this.visitExpressionWithContext(node.outerSelector, context)),
-                Expr.arrow([node.name], this.visitExpressionWithContext(node.innerSelector, context)),
-                Expr.arrow([bindingArgument(context.bindings), node.intoName || node.name], bindingsObject(context.bindings, node.intoName || node.name))
-            ]
-        );
-        return { bindings, expression };
+        let expression = this.visitExpressionWithContext(node.expression, context);
+        expression = asQuery(expression, async);
+        expression = callTraversalMethod(expression, node.axisSelectorToken);
+        expression = callQueryMethod(context.expression, node.intoName ? "groupJoin" : "join", [
+            expression,
+            Expr.arrow(undefined, [bindingArgument(context.bindings)], this.visitExpressionWithContext(node.outerSelector, context)),
+            Expr.arrow(undefined, [node.name], this.visitExpressionWithContext(node.innerSelector, context)),
+            Expr.arrow(async || context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [bindingArgument(context.bindings), node.intoName || node.name], bindingsObject(context.bindings, node.intoName || node.name))
+        ]);
+        return { bindings, expression, async: async || context.async };
     }
 
     private visitSelectClause(node: SelectClause): QueryContext {
         const context = this.visitClause(node.outerClause);
         const contextArgument = bindingArgument(context.bindings);
-        const selectorExpression = withTraversal(this.visitExpressionWithContext(node.expression, context), node.selectorToken);
-        if (sameReference(contextArgument, selectorExpression)) return context;
+        let expression = this.visitExpressionWithContext(node.expression, context);
+        expression = callTraversalMethod(expression, node.axisSelectorToken);
+        if (sameReference(contextArgument, expression)) return context;
         const bindings = node.intoName ? node.intoName : context.bindings;
-        const expression = Expr.call(
-            fn("select"),
-            [
-                context.expression,
-                Expr.arrow([contextArgument], selectorExpression)
-            ]
-        );
-        return { bindings, expression };
+        expression = callQueryMethod(context.expression, "select", [
+            Expr.arrow(context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [contextArgument], expression)
+        ]);
+        return { bindings, expression, async: context.async };
     }
 
     private visitClause(node: Clause) {
@@ -284,7 +267,7 @@ export class Visitor {
     private visitArrowFunction(node: ArrowFunction) {
         const body = this.visitExpression(node.body);
         return node.body !== body
-            ? Expr.arrow(node.parameterList, body)
+            ? Expr.arrow(node.asyncKeyword, node.parameterList, body)
             : node;
     }
 
@@ -450,12 +433,17 @@ export class Visitor {
         return node;
     }
 
-    private visitExpressionWithContext(node: Expression, context: QueryContext): Expression {
-        const savedContext = this._context;
-        this._context = context;
-        const result = this.visitExpression(node);
-        this._context = savedContext;
-        return result;
+    private visitExpressionWithContext(node: Expression, context: QueryContext | undefined): Expression {
+        if (context) {
+            const savedContext = this._context;
+            this._context = context;
+            const result = this.visitExpression(node);
+            this._context = savedContext;
+            return result;
+        }
+        else {
+            return this.visitExpression(node);
+        }
     }
 }
 
@@ -464,27 +452,37 @@ function sameReference(left: Expression, right: Expression) {
         || (left.kind === SyntaxKind.Identifier && right.kind === SyntaxKind.Identifier && left.text === right.text);
 }
 
-function withTraversal(expression: Expression, selectorToken: Selector | undefined) {
-    if (selectorToken) {
-        return Expr.call(
-            fn(getAxis(selectorToken)),
-            [expression]
-        )
-    }
+function asAsyncContextIfNeeded(context: QueryContext, async: boolean): QueryContext;
+function asAsyncContextIfNeeded(context: QueryContext | undefined, async: boolean): QueryContext | undefined;
+function asAsyncContextIfNeeded(context: QueryContext | undefined, async: boolean) {
+    if (context && async && !context.async) return { bindings: context.bindings, expression: asQuery(context.expression, true), async: true };
+    return context;
+}
+
+function asQuery(expression: Expression, async: boolean) {
+    return Expr.call(async ? "$fromAsync" : "$from", [expression]);
+}
+
+function callQueryMethod(expression: Expression, method: Extract<keyof OrderedHierarchyQuery<any>, string>, argumentList: ReadonlyArray<Expression>) {
+    return Expr.call(Expr.propertyAccess(expression, method), argumentList);
+}
+
+function callTraversalMethod(expression: Expression, axisSelectorToken: AxisSelector | undefined) {
+    if (axisSelectorToken) expression = callQueryMethod(expression, getAxis(axisSelectorToken), []);
     return expression;
 }
 
-function getAxis(selectorToken: Selector) {
+function getAxis(selectorToken: AxisSelector) {
     switch (selectorToken.kind) {
-        case SyntaxKind.RootSelector: return "root";
-        case SyntaxKind.ParentSelector: return "parents";
-        case SyntaxKind.ChildSelector: return "children";
-        case SyntaxKind.AncestorSelector: return "ancestors";
-        case SyntaxKind.AncestorOrSelfSelector: return "ancestorsAndSelf";
-        case SyntaxKind.DescendantSelector: return "descendants";
-        case SyntaxKind.DescendantOrSelfSelector: return "descendantsAndSelf";
-        case SyntaxKind.SelfSelector: return "self";
-        case SyntaxKind.SiblingSelector: return "siblings";
-        case SyntaxKind.SiblingOrSelfSelector: return "siblingsAndSelf";
+        case SyntaxKind.RootAxisSelector: return "root";
+        case SyntaxKind.ParentAxisSelector: return "parents";
+        case SyntaxKind.ChildAxisSelector: return "children";
+        case SyntaxKind.AncestorAxisSelector: return "ancestors";
+        case SyntaxKind.AncestorOrSelfAxisSelector: return "ancestorsAndSelf";
+        case SyntaxKind.DescendantAxisSelector: return "descendants";
+        case SyntaxKind.DescendantOrSelfAxisSelector: return "descendantsAndSelf";
+        case SyntaxKind.SelfAxisSelector: return "self";
+        case SyntaxKind.SiblingAxisSelector: return "siblings";
+        case SyntaxKind.SiblingOrSelfAxisSelector: return "siblingsAndSelf";
     }
 }

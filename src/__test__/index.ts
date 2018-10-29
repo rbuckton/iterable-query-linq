@@ -7,6 +7,10 @@ import * as users from "./data/users";
 // import * as numbers from "./data/numbers";
 
 describe("linq", () => {
+    it("non-query", () => {
+        const q = linq`${1}`;
+        expect(q.toArray()).to.deep.equal([1]);
+    });
     it("simple", () => {
         const q = linq`
             from x in ${[1, 2, 3]}
@@ -69,5 +73,4 @@ describe("linq", () => {
             { role: users.guestRole, users: [] }
         ]);
     });
-
 });

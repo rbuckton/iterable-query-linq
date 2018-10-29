@@ -1,4 +1,4 @@
-import { TokenKind, Identifier, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause, OrderbyClause, OrderbyComparator, GroupClause, JoinClause, QueryExpression, ParenthesizedExpression, Elision, SpreadElement, ArrayLiteral, PropertyAssignment, ShorthandPropertyAssignment, ObjectLiteral, NewExpression, CallExpression, PropertyAccessExpression, ElementAccessExpression, PrefixUnaryExpression, PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause, Token, TextLiteral, Node, KeywordKind, PunctuationKind, isKeywordKind, ArrowFunction, CommaListExpression, isSelectorKind } from "./types";
+import { TokenKind, Identifier, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause, OrderbyClause, OrderbyComparator, GroupClause, JoinClause, QueryExpression, ParenthesizedExpression, Elision, SpreadElement, ArrayLiteral, PropertyAssignment, ShorthandPropertyAssignment, ObjectLiteral, NewExpression, CallExpression, PropertyAccessExpression, ElementAccessExpression, PrefixUnaryExpression, PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause, Token, TextLiteral, Node, KeywordKind, PunctuationKind, isKeywordKind, ArrowFunction, CommaListExpression, isAxisSelectorKind } from "./types";
 import { tokenToString } from "./scanner";
 
 const indents: string[] = ["", "  "];
@@ -135,7 +135,7 @@ function emitToken(writer: StringWriter, node: Token): void {
     if (isKeywordKind(node.kind)) {
         writer.writeKeyword(node.kind);
     }
-    else if (isSelectorKind(node.kind)) {
+    else if (isAxisSelectorKind(node.kind)) {
         writer.writeToken(node.kind, true, false);
     }
     else if (node.kind !== SyntaxKind.EndOfFileToken) {
@@ -160,9 +160,10 @@ function emitComputedPropertyName(writer: StringWriter, node: ComputedPropertyNa
 function emitFromClause(writer: StringWriter, node: FromClause): void {
     writer.writeNode(node.outerClause);
     writer.writeKeyword(SyntaxKind.FromKeyword);
+    writer.writeNode(node.awaitKeyword);
     writer.writeNode(node.name);
     writer.writeKeyword(SyntaxKind.InKeyword);
-    writer.writeNode(node.selectorToken);
+    writer.writeNode(node.axisSelectorToken);
     writer.writeNode(node.expression);
     writer.writeLine();
 }
@@ -215,9 +216,10 @@ function emitGroupClause(writer: StringWriter, node: GroupClause): void {
 function emitJoinClause(writer: StringWriter, node: JoinClause): void {
     writer.writeNode(node.outerClause);
     writer.writeKeyword(SyntaxKind.JoinKeyword);
+    writer.writeNode(node.awaitKeyword);
     writer.writeNode(node.name);
     writer.writeKeyword(SyntaxKind.InKeyword);
-    writer.writeNode(node.selectorToken);
+    writer.writeNode(node.axisSelectorToken);
     writer.writeNode(node.expression);
     writer.writeKeyword(SyntaxKind.OnKeyword);
     writer.writeNode(node.outerSelector);
@@ -233,7 +235,7 @@ function emitJoinClause(writer: StringWriter, node: JoinClause): void {
 function emitSelectClause(writer: StringWriter, node: SelectClause): void {
     writer.writeNode(node.outerClause);
     writer.writeKeyword(SyntaxKind.SelectKeyword);
-    writer.writeNode(node.selectorToken);
+    writer.writeNode(node.axisSelectorToken);
     writer.writeNode(node.expression);
     if (node.intoName) {
         writer.writeKeyword(SyntaxKind.IntoKeyword);
@@ -339,7 +341,8 @@ function emitConditionalExpression(writer: StringWriter, node: ConditionalExpres
 }
 
 function emitArrowFunction(writer: StringWriter, node: ArrowFunction): void {
-    if (node.parameterList.length === 1) {
+    writer.writeNode(node.asyncKeyword);
+    if (node.parameterList.length === 1 && !node.asyncKeyword) {
         writer.writeNode(node.parameterList[0]);
     }
     else {
