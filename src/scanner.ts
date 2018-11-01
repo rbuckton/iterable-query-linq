@@ -1,37 +1,34 @@
-import { SyntaxKind, TokenFlags, TokenKind, isECMAScriptReservedWordKind, isQueryKeywordKind } from "./types";
+import { SyntaxKind, TokenFlags, TokenKind } from "./types";
 import { RecoverableSyntaxError } from "./errors";
 
-const selectorPattern = String.raw`?:\b(ancestor(?:-or-self)?|child|descendant(?:-or-self)?|parent|root|s(?:elf|ibling(?:-or-self)?)?)\s*::`;
-const selectorIndex = 1;
-const keywordPattern = String.raw`\b(?:a(?:s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|lass|on(?:st|tinue))|d(?:ebugger|e(?:fault|lete|scending)|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:ackage|r(?:ivate|otected)|ublic)|return|s(?:elect|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
-const keywordIndex = 2;
-const operatorPattern = String.raw`[{}()\[\],~?:]|\.(?:\.\.)?|<{1,2}=?|>{1,3}=?|=(?:={1,2}|>)|!={0,2}|\+[+=]?|-[-=]?|\*{1,2}=?|\/=?|%=?|&[&=]?|\|[|=]?|\^=?`;
-const operatorIndex = 3;
+const keywordPattern = String.raw`\b(?:a(?:ncestors(?:orself)?of|s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|hildrenof|lass|on(?:st|tinue))|d(?:e(?:bugger|fault|lete|scend(?:ants(?:orself)?of|ing))|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|hierarchy|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:a(?:rentof|ckage)|r(?:ivate|otected)|ublic)|r(?:eturn|ootof)|s(?:el(?:ect|fof)|iblings(?:orself)?of|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
+const keywordIndex = 1;
+const operatorPattern = String.raw`[{}()\[\],~?:]|\.(?:\.\.)?|<{1,2}=?|>{1,3}=?|=(?:={1,2}|>)?|!={0,2}|\+[+=]?|-[-=]?|\*{1,2}=?|\/=?|%=?|&[&=]?|\|[|=]?|\^=?`;
+const operatorIndex = 2;
 const stringPattern = String.raw`'(?:[^']|\\')+'?|"(?:[^"]|\\")+"?`;
-const stringIndex = 4;
+const stringIndex = 3;
 const decimalDigitsPattern = String.raw`0|[1-9]\d*(?:\.\d*)?|\.\d+`;
-const decimalDigitsIndex = 5;
+const decimalDigitsIndex = 4;
 const hexDigitsPattern = String.raw`0x[0-9a-fA-F]+`;
-const hexDigitsIndex = 6;
+const hexDigitsIndex = 5;
 const octalDigitsPattern = String.raw`0o[0-7]+`;
-const octalDigitsIndex = 7;
+const octalDigitsIndex = 6;
 const binaryDigitsPattern = String.raw`0b[01]+`;
-const binaryDigitsIndex = 8;
+const binaryDigitsIndex = 7;
 const identifierPattern = String.raw`[a-zA-Z_$][a-zA-Z_$\d]*`;
-const identifierIndex = 9;
-const identifierRegExp = new RegExp(`^${identifierPattern}$`);
+const identifierIndex = 8;
 const whitespacePattern = String.raw`[\s\r\n]+`;
-const whitespaceIndex = 10;
+const whitespaceIndex = 9;
 const unrecognizedPattern = String.raw`.`;
-const unrecognizedIndex = 11;
-const tokensPattern = String.raw`(${selectorPattern})|(${keywordPattern})|(${operatorPattern})|(${stringPattern})|(${decimalDigitsPattern})|(${hexDigitsPattern})|(${octalDigitsPattern})|(${binaryDigitsPattern})|(${identifierPattern})|(${whitespacePattern})|(${unrecognizedPattern})`;
+const unrecognizedIndex = 10;
+const tokensPattern = String.raw`(${keywordPattern})|(${operatorPattern})|(${stringPattern})|(${decimalDigitsPattern})|(${hexDigitsPattern})|(${octalDigitsPattern})|(${binaryDigitsPattern})|(${identifierPattern})|(${whitespacePattern})|(${unrecognizedPattern})`;
 const tokensRegExp = new RegExp(tokensPattern, "g");
 const regExpRegExp = /\/((?:[^\/]|\\\/)+(\/[a-zA-Z]*)?)?/g;
 const stringRegExp = /'(?:[^']|\\')+'|"(?:[^"]|\\")+"/;
 
 const stringToTokenMap: Record<string, TokenKind> = {
-    "ancestor::": SyntaxKind.AncestorAxisSelector,
-    "ancestor-or-self::": SyntaxKind.AncestorOrSelfAxisSelector,
+    "ancestorsof": SyntaxKind.AncestorsofKeyword,
+    "ancestorsorselfof": SyntaxKind.AncestorsorselfofKeyword,
     "ascending": SyntaxKind.AscendingKeyword,
     "async": SyntaxKind.AsyncKeyword,
     "await": SyntaxKind.AwaitKeyword,
@@ -39,15 +36,15 @@ const stringToTokenMap: Record<string, TokenKind> = {
     "by": SyntaxKind.ByKeyword,
     "case": SyntaxKind.CaseKeyword,
     "catch": SyntaxKind.CatchKeyword,
-    "child::": SyntaxKind.ChildAxisSelector,
+    "childrenof": SyntaxKind.ChildrenofKeyword,
     "class": SyntaxKind.ClassKeyword,
     "const": SyntaxKind.ConstKeyword,
     "continue": SyntaxKind.ContinueKeyword,
     "debugger": SyntaxKind.DebuggerKeyword,
     "default": SyntaxKind.DefaultKeyword,
     "delete": SyntaxKind.DeleteKeyword,
-    "descendant::": SyntaxKind.DescendantAxisSelector,
-    "descendant-or-self::": SyntaxKind.DescendantOrSelfAxisSelector,
+    "descendantsof": SyntaxKind.DescendantsofKeyword,
+    "descendantsorselfof": SyntaxKind.DescendantsorselfofKeyword,
     "descending": SyntaxKind.DescendingKeyword,
     "do": SyntaxKind.DoKeyword,
     "else": SyntaxKind.ElseKeyword,
@@ -61,6 +58,7 @@ const stringToTokenMap: Record<string, TokenKind> = {
     "from": SyntaxKind.FromKeyword,
     "function": SyntaxKind.FunctionKeyword,
     "group": SyntaxKind.GroupKeyword,
+    "hierarchy": SyntaxKind.HierarchyKeyword,
     "if": SyntaxKind.IfKeyword,
     "implements": SyntaxKind.ImplementsKeyword,
     "import": SyntaxKind.ImportKeyword,
@@ -76,15 +74,16 @@ const stringToTokenMap: Record<string, TokenKind> = {
     "on": SyntaxKind.OnKeyword,
     "orderby": SyntaxKind.OrderbyKeyword,
     "package": SyntaxKind.PackageKeyword,
-    "parent::": SyntaxKind.ParentAxisSelector,
+    "parentof": SyntaxKind.ParentofKeyword,
     "private": SyntaxKind.PrivateKeyword,
     "protected": SyntaxKind.ProtectedKeyword,
     "public": SyntaxKind.PublicKeyword,
     "return": SyntaxKind.ReturnKeyword,
-    "root::": SyntaxKind.RootAxisSelector,
+    "rootof": SyntaxKind.RootofKeyword,
     "select": SyntaxKind.SelectKeyword,
-    "self::": SyntaxKind.SelfAxisSelector,
-    "sibling::": SyntaxKind.SiblingAxisSelector,
+    "selfof": SyntaxKind.SelfofKeyword,
+    "siblingsof": SyntaxKind.SiblingsofKeyword,
+    "siblingsorselfof": SyntaxKind.SiblingsorselfofKeyword,
     "static": SyntaxKind.StaticKeyword,
     "super": SyntaxKind.SuperKeyword,
     "switch": SyntaxKind.SwitchKeyword,
@@ -169,18 +168,6 @@ export function tokenToString(kind: TokenKind) {
 }
 
 /** @internal */
-export function isIdentifierReference(text: string) {
-    if (identifierRegExp.test(text)) {
-        const token = stringToToken(text);
-        return token === undefined
-            || !isECMAScriptReservedWordKind(token)
-            && !isECMAScriptReservedWordKind(token)
-            && !isQueryKeywordKind(token);
-    }
-    return false;
-}
-
-/** @internal */
 export class Scanner {
     private _text: string;
     private _tokenizer: RegExp;
@@ -231,7 +218,6 @@ export class Scanner {
             const match = this._tokenizer.exec(this._text)!;
             this._pos = this._tokenizer.lastIndex === -1 ? this._text.length : this._tokenizer.lastIndex;
             if (match[whitespaceIndex]) continue;
-            if (match[selectorIndex]) return this._token = stringToTokenMap[match[selectorIndex] + "::"];
             if (match[keywordIndex]) return this._token = stringToTokenMap[match[keywordIndex]];
             if (match[operatorIndex]) return this._token = stringToTokenMap[match[operatorIndex]];
             if (match[stringIndex]) {

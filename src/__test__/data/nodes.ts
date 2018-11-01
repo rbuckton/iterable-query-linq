@@ -31,6 +31,8 @@ export const nodeAC: Node = { name: "AC", children: [nodeACA] };
 export const nodeA: Node = { name: "A", children: [nodeAA, nodeAB, nodeAC] };
 makeTree(nodeA);
 
+export const nodes = [nodeA, nodeAC, nodeACA, nodeAB, nodeAA, nodeAAC, nodeAAB, nodeAAA, nodeAAAA];
+
 export const badNode: Node = { name: "bad", children: [undefined!] };
 
 export const nodeHierarchy: HierarchyProvider<Node> = {

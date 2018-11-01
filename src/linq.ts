@@ -1,8 +1,8 @@
-import { from, fromAsync } from "iterable-query";
 import * as vm from "vm";
+import * as iq from "iterable-query";
 import { Parser } from "./parser";
-import { Visitor } from "./transformer";
-import { nodeToString } from "./emitter";
+import { Transformer } from "./transformer";
+import { Emitter } from "./emitter";
 import { toArrayAsync } from "iterable-query/fn";
 
 export function linq<T = any>(array: TemplateStringsArray, ...args: any[]): CompiledIterable<T> {
@@ -24,19 +24,17 @@ export namespace linq {
 }
 
 function parseAndExecuteQueryWorker(text: string, context: vm.Context = {}, async: boolean) {
-    const source = new Parser(text, async).parse();
-    const compiled = new Visitor().visit(source);
-    const output = nodeToString(compiled);
-    const wrapped = async
-        ? `($from, $fromAsync) => ${output}`
-        : `$from => ${output}`;
+    const source = new Parser().parse(text, async);
+    const compiled = new Transformer().visit(source);
+    const output = new Emitter().emit(compiled);
+    const wrapped = `$iq => ${output}`;
     if (!vm.isContext(context)) vm.createContext(context);
     const compiledWrapper = vm.runInContext(wrapped, context);
     return {
         wrapped,
         result: async
-            ? compiledWrapper(from, fromAsync)
-            : compiledWrapper(from)
+            ? compiledWrapper(iq)
+            : compiledWrapper(iq)
     };
 }
 
