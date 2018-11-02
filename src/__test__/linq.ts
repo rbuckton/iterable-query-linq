@@ -1,9 +1,10 @@
+import * as users from "./data/users";
+import * as nodes from "./data/nodes";
 import { linq } from "../";
 import { expect } from "chai";
-import * as users from "./data/users";
-import { CompiledIterable, CompiledAsyncIterable } from "../linq";
-import * as nodes from "./data/nodes";
+import { Query, AsyncQuery } from "iterable-query";
 import { toHierarchy, toHierarchyAsync, toArray, toArrayAsync } from "iterable-query/fn";
+import { getCompilationResult } from "../linq";
 // import * as books from "./data/books";
 // import * as numbers from "./data/numbers";
 
@@ -15,7 +16,7 @@ describe("linq", () => {
     it("nested", () => {
         const q = linq`
             (
-                from x in ${[1, 2, 3]} 
+                from x in ${[1, 2, 3]}
                 select x
             ).reverse()
         `;
@@ -320,22 +321,28 @@ describe("linq", () => {
     });
 });
 
-function expectSequence(actual: CompiledIterable<any>, expected: any[], mapfn?: (value: any) => any) {
+function expectSequence(actual: Query<any>, expected: any[], mapfn?: (value: any) => any) {
     try {
         expect(toArray(actual, mapfn!)).to.deep.equal(expected);
     }
     catch (e) {
-        e.message += `\n\nSource:\n${actual.toString(false)}\n\nTransformed:\n${actual.toString(true)}`;
+        const result = getCompilationResult(actual);
+        if (result) {
+            e.message += `\n\nSource:\n${result.sourceText}\n\nTransformed:\n${result.compiledText}`;
+        }
         throw e;
     }
 }
 
-async function expectSequenceAsync(actual: CompiledAsyncIterable<any>, expected: any[], mapfn?: (value: any) => any) {
+async function expectSequenceAsync(actual: AsyncQuery<any>, expected: any[], mapfn?: (value: any) => any) {
     try {
         expect(await toArrayAsync(actual, mapfn!)).to.deep.equal(expected);
     }
     catch (e) {
-        e.message += `\n\nSource:\n${actual.toString(false)}\n\nTransformed:\n${actual.toString(true)}`;
+        const result = getCompilationResult(actual);
+        if (result) {
+            e.message += `\n\nSource:\n${result.sourceText}\n\nTransformed:\n${result.compiledText}`;
+        }
         throw e;
     }
 }

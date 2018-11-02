@@ -12,7 +12,7 @@ import {
     ShorthandAssignmentProperty, ArrayAssignmentPattern, AssignmentElement, AssignmentRestElement,
     AssignmentExpression, AssignmentRestProperty, SequenceBinding,
 } from "./types";
-import { tokenToString } from "./scanner";
+import { tokenToString, isIdentifierChar } from "./scanner";
 
 const indents: string[] = ["", "  "];
 
@@ -545,12 +545,4 @@ export class Emitter {
             this.writeNode(node);
         }
     }
-}
-
-function isIdentifierChar(ch: string) {
-    return ch >= "a" && ch <= "z"
-        || ch >= "A" && ch <= "Z"
-        || ch >= "0" && ch <= "9"
-        || ch === "_"
-        || ch === "$";
 }

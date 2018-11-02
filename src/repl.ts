@@ -3,7 +3,7 @@ import { start, Recoverable, ReplOptions } from "repl";
 import { parseAndExecuteAsyncQuery, parseAndExecuteQuery } from "./linq";
 import { RecoverableSyntaxError } from "./errors";
 import { toArrayAsync, takeAsync, take, toArray } from "iterable-query/fn";
-import { fromAsync, from } from "iterable-query/dist/lib";
+import { fromAsync, from, Query, AsyncQuery } from "iterable-query";
 import { EOL } from "os";
 
 export interface LinqReplOptions {
@@ -14,7 +14,7 @@ export interface LinqReplOptions {
     useColors?: boolean;
     limit?: number;
     async?: boolean;
-    writer?: (value: Iterable<any>) => any;
+    writer?: (value: Query<any>) => any;
 }
 
 export interface AsyncLinqReplOptions {
@@ -25,7 +25,7 @@ export interface AsyncLinqReplOptions {
     useColors?: boolean;
     limit?: number;
     async: true;
-    writer?: (value: AsyncIterable<any>) => any;
+    writer?: (value: AsyncQuery<any>) => any;
 }
 
 

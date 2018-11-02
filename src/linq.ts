@@ -3,18 +3,21 @@ import * as iq from "iterable-query";
 import { Parser } from "./parser";
 import { Transformer } from "./transformer";
 import { Emitter } from "./emitter";
-import { toArrayAsync } from "iterable-query/fn";
+import { Query, AsyncQuery, from, fromAsync } from "iterable-query";
+import { Expression } from "./types";
+import { isIdentifierChar } from "./scanner";
 
-export function linq<T = any>(array: TemplateStringsArray, ...args: any[]): CompiledIterable<T> {
+export function linq<T = any>(array: TemplateStringsArray, ...args: any[]): Query<T> {
     let text = array[0];
     for (let i = 0; i < args.length; i++) {
-        text += `($arguments[${i}])` + array[i + 1];
+        if (isIdentifierChar(text.charAt(text.length - 1))) text += " ";
+        text += `$arguments[${i}]` + array[i + 1];
     }
     return parseAndExecuteQuery(text, { $arguments: args });
 }
 
 export namespace linq {
-    export function async<T = any>(array: TemplateStringsArray, ...args: any[]): CompiledAsyncIterable<T> {
+    export function async<T = any>(array: TemplateStringsArray, ...args: any[]): AsyncQuery<T> {
         let text = array[0];
         for (let i = 0; i < args.length; i++) {
             text += `($arguments[${i}])` + array[i + 1];
@@ -23,29 +26,24 @@ export namespace linq {
     }
 }
 
-function parseAndExecuteQueryWorker(text: string, context: vm.Context = {}, async: boolean) {
-    const source = new Parser().parse(text, async);
-    const compiled = new Transformer().visit(source);
+function parseAndExecuteQueryWorker(sourceText: string, context: vm.Context = {}, async: boolean): CompilationResult {
+    const expression = new Parser().parse(sourceText, async);
+    const compiled = new Transformer().visit(expression);
     const output = new Emitter().emit(compiled);
-    const wrapped = `$iq => ${output}`;
+    const compiledText = `$iq => ${output}`;
     if (!vm.isContext(context)) vm.createContext(context);
-    const compiledWrapper = vm.runInContext(wrapped, context);
-    return {
-        wrapped,
-        result: async
-            ? compiledWrapper(iq)
-            : compiledWrapper(iq)
-    };
+    const compiledWrapper = vm.runInContext(compiledText, context);
+    return { async, sourceText, compiledText, expression, thunk: () => compiledWrapper(iq) };
 }
 
-export function parseAndExecuteQuery<T = any>(text: string, context: vm.Context = {}): CompiledIterable<T> {
-    const { wrapped, result } = parseAndExecuteQueryWorker(text, context, false);
-    return new _CompiledIterable(isIterable(result) ? result : [result], text, wrapped);
+export function parseAndExecuteQuery<T = any>(sourceText: string, context: vm.Context = {}): Query<T> {
+    const result = parseAndExecuteQueryWorker(sourceText, context, false);
+    return addCompilationResult(from(new CompilationThunkIterable(parseAndExecuteQueryWorker(sourceText, context, false))), result);
 }
 
-export function parseAndExecuteAsyncQuery<T = any>(text: string, context: vm.Context = {}): CompiledAsyncIterable<T> {
-    const { wrapped, result } = parseAndExecuteQueryWorker(text, context, true);
-    return new _CompiledAsyncIterable(isAsyncIterable(result) || isIterable(result) ? result : [result], text, wrapped);
+export function parseAndExecuteAsyncQuery<T = any>(sourceText: string, context: vm.Context = {}): AsyncQuery<T> {
+    const result = parseAndExecuteQueryWorker(sourceText, context, true);
+    return addCompilationResult(fromAsync(new CompilationThunkAsyncIterable(result)), result);
 }
 
 function isIterable(value: any): value is Iterable<any> {
@@ -60,33 +58,30 @@ function isAsyncIterable(value: any): value is AsyncIterable<any> {
         && Symbol.asyncIterator in value;
 }
 
-export interface CompiledIterable<T> extends Iterable<T> {
-    toArray(): T[];
-    toString(debug?: boolean): string;
-}
+const weakCompilationResult = new WeakMap<Query<any> | AsyncQuery<any>, CompilationResult>();
 
-export interface CompiledAsyncIterable<T> extends AsyncIterable<T> {
-    toArray(): Promise<T[]>;
-    toString(debug?: boolean): string;
-}
-
-class _CompiledIterable implements Iterable<any> {
-    private _source: Iterable<any>;
+class CompilationThunkIterable implements Iterable<any> {
+    readonly expression: Expression;
+    private _thunk: () => any;
     private _sourceText: string;
     private _compiledText: string;
 
-    constructor(source: Iterable<any>, sourceText: string, compiledText: string) {
-        this._source = source;
+    constructor({ thunk, expression, sourceText, compiledText }: CompilationResult) {
+        this._thunk = thunk;
+        this.expression = expression;
         this._sourceText = sourceText;
         this._compiledText = compiledText;
     }
 
     *[Symbol.iterator](): Iterator<any> {
-        yield* this._source;
-    }
-
-    toArray() {
-        return Array.from(this);
+        const thunk = this._thunk();
+        const result = thunk;
+        if (isIterable(result)) {
+            yield* result;
+        }
+        else {
+            yield result;
+        }
     }
 
     toString(debug = false) {
@@ -94,26 +89,50 @@ class _CompiledIterable implements Iterable<any> {
     }
 }
 
-class _CompiledAsyncIterable implements AsyncIterable<any> {
-    private _source: AsyncIterable<any> | Iterable<any>;
+class CompilationThunkAsyncIterable implements AsyncIterable<any> {
+    readonly expression: Expression;
+    private _thunk: () => any;
     private _sourceText: string;
     private _compiledText: string;
 
-    constructor(source: AsyncIterable<any> | Iterable<any>, sourceText: string, compiledText: string) {
-        this._source = source;
+    constructor({ thunk, expression, sourceText, compiledText }: CompilationResult) {
+        this._thunk = thunk;
+        this.expression = expression;
         this._sourceText = sourceText;
         this._compiledText = compiledText;
     }
 
     async *[Symbol.asyncIterator](): AsyncIterator<any> {
-        yield* this._source;
-    }
-
-    toArray() {
-        return toArrayAsync(this);
+        const thunk = this._thunk();
+        const result = thunk;
+        if (isAsyncIterable(result) || isIterable(result)) {
+            yield* result;
+        }
+        else {
+            yield result;
+        }
     }
 
     toString(debug = false) {
         return debug ? this._compiledText : this._sourceText;
     }
+}
+
+/** @internal */
+export interface CompilationResult {
+    readonly async: boolean;
+    readonly sourceText: string;
+    readonly compiledText: string;
+    readonly expression: Expression;
+    readonly thunk: () => any;
+}
+
+function addCompilationResult<T extends Query<any> | AsyncQuery<any>>(value: T, result: CompilationResult): T {
+    weakCompilationResult.set(value, result);
+    return value;
+}
+
+/** @internal */
+export function getCompilationResult(value: Query<any> | AsyncQuery<any>): CompilationResult | undefined {
+    return weakCompilationResult.get(value);
 }

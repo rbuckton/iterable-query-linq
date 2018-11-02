@@ -284,3 +284,12 @@ export class Scanner {
         return this._token;
     }
 }
+
+/** @internal */
+export function isIdentifierChar(ch: string) {
+    return ch >= "a" && ch <= "z"
+        || ch >= "A" && ch <= "Z"
+        || ch >= "0" && ch <= "9"
+        || ch === "_"
+        || ch === "$";
+}
