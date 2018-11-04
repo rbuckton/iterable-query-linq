@@ -1,47 +1,42 @@
 import {
     FromClause, LetClause, WhereClause, OrderbyClause, GroupClause, JoinClause, SelectClause,
     QueryBodyClause, SyntaxKind, Expression, QueryExpression, ObjectLiteralElement,
-    OrderbyComparator, AssignmentExpressionOrHigher, MemberExpressionOrHigher,
-    HierarchyAxisKeyword, SequenceBinding, Argument, BindingIdentifier,
+    OrderbyComparator, AssignmentExpressionOrHigher,
+    SequenceBinding, Argument, BindingIdentifier,
     ObjectBindingPatternElement, BindingElement,
+    HierarchyAxisKeywordKind,
+    Syntax,
+    Identifier,
+    isIdentifier
 } from "./types";
-import { Expr } from "./factory";
 import { ExpressionVisitor } from "./visitor";
 import { OrderedHierarchyQuery } from "iterable-query/dist/lib";
 import { assertFail } from "./utils";
 
-class Scope {
+class QueryContext {
     readonly bindings: ReadonlyArray<BindingIdentifier>;
-    readonly outerScope: Scope | undefined;
-    private _boundNames: Map<string, BindingIdentifier> | undefined;
+    readonly expression: Expression;
+    readonly async: boolean;
+    private _parameter?: BindingElement;
 
-    constructor(bindings: ReadonlyArray<BindingIdentifier>, outerScope?: Scope) {
+    constructor(bindings: ReadonlyArray<BindingIdentifier>, expression: Expression, async: boolean) {
         this.bindings = bindings;
-        this.outerScope = outerScope;
+        this.expression = expression;
+        this.async = async;
     }
 
-    get boundNames(): ReadonlyMap<string, BindingIdentifier> {
-        if (!this._boundNames) {
-            this._boundNames = new Map<string, BindingIdentifier>();
-            for (const binding of this.bindings) {
-                this._boundNames.set(binding.text, binding);
+    get parameter() {
+        if (!this._parameter) {
+            if (this.bindings.length > 1) {
+                const properties: ObjectBindingPatternElement[] = [];
+                for(const binding of this.bindings) {
+                    properties.push(Syntax.ShorthandBindingProperty(binding, undefined));
+                }
+                return this._parameter = Syntax.BindingElement(Syntax.ObjectBindingPattern(properties, undefined));
             }
+            return this._parameter = Syntax.BindingElement(this.bindings[0]);
         }
-        return this._boundNames;
-    }
-
-    protected resolveLocalName(name: string): MemberExpressionOrHigher | undefined {
-        return this.boundNames.get(name);
-    }
-
-    resolveName(name: string): MemberExpressionOrHigher {
-        const boundName = this.resolveLocalName(name) || this.outerScope && this.outerScope.resolveName(name);
-        if (!boundName) throw new Error(`'${name}' not found`);
-        return boundName;
-    }
-
-    createScope(bindings: ReadonlyArray<BindingIdentifier>) {
-        return new Scope(bindings, this);
+        return this._parameter;
     }
 }
 
@@ -54,27 +49,27 @@ abstract class QueryBuilderBase {
         this.async = async;
     }
 
-    createBindingsExpression(localName?: BindingIdentifier, initializer?: AssignmentExpressionOrHigher): AssignmentExpressionOrHigher {
-        if (this.bindings.length === 1) return this.bindings[0];
+    createBindingsExpression(localName?: BindingIdentifier, initializer?: Expression): Expression {
+        if (this.bindings.length === 1) return Syntax.IdentifierReference(this.bindings[0]);
         const properties: ObjectLiteralElement[] = [];
         this.writeBindings(properties, localName);
         if (localName) {
             const binding = initializer && !sameReference(localName, initializer)
-                ? Expr.propertyDefinition(localName, initializer)
-                : Expr.shorthandPropertyDefinition(localName);
+                ? Syntax.PropertyDefinition(Syntax.IdentifierName(localName), initializer)
+                : Syntax.ShorthandPropertyDefinition(Syntax.IdentifierReference(localName));
             properties.push(binding);
         }
-        return Expr.objectLiteral(properties);
+        return Syntax.ObjectLiteral(properties);
     }
 
     protected writeBindings(properties: ObjectLiteralElement[], localName?: BindingIdentifier): void {
         for (const binding of this.bindings) {
             if (localName && sameReference(binding, localName)) continue;
-            properties.push(Expr.shorthandPropertyDefinition(binding));
+            properties.push(Syntax.ShorthandPropertyDefinition(Syntax.IdentifierReference(binding)));
         }
     }
 
-    finishContext(expression: AssignmentExpressionOrHigher) {
+    finishContext(expression: Expression) {
         return new QueryContext(this.bindings, expression, this.async);
     }
 }
@@ -112,45 +107,8 @@ class JoinQuery extends QueryBuilderBase {
     }
 }
 
-class QueryContext extends Scope {
-    readonly expression: AssignmentExpressionOrHigher;
-    readonly async: boolean;
-    private _parameter?: BindingElement;
-
-    constructor(bindings: ReadonlyArray<BindingIdentifier>, expression: AssignmentExpressionOrHigher, async: boolean) {
-        super(bindings);
-        this.expression = expression;
-        this.async = async;
-    }
-
-    get parameter() {
-        if (!this._parameter) {
-            if (this.bindings.length > 1) {
-                const properties: ObjectBindingPatternElement[] = [];
-                for(const binding of this.bindings) {
-                    properties.push(Expr.shorthandBindingProperty(binding, undefined));
-                }
-                return this._parameter = Expr.bindingElement(Expr.objectBindingPattern(properties, undefined));
-            }
-            return this._parameter = Expr.bindingElement(this.bindings[0]);
-        }
-        return this._parameter;
-    }
-}
-
 /** @internal */
 export class Transformer extends ExpressionVisitor {
-    visit(node: Expression): Expression {
-        return this.visitExpression(node);
-    }
-
-    protected visitAssignmentExpressionOrHigher(node: AssignmentExpressionOrHigher): AssignmentExpressionOrHigher {
-        switch (node.kind) {
-            case SyntaxKind.QueryExpression: return this.transformQueryExpression(node);
-            default: return super.visitAssignmentExpressionOrHigher(node);
-        }
-    }
-
     // These nodes must be transformed, never visited directly
     protected visitFromClause(): never { return assertFail("Not supported"); }
     protected visitLetClause(): never { return assertFail("Not supported"); }
@@ -161,21 +119,32 @@ export class Transformer extends ExpressionVisitor {
     protected visitSelectClause(): never { return assertFail("Not supported"); }
     protected visitSequenceBinding(): never { return assertFail("Not supported"); }
     protected visitQueryBodyClause(): never { return assertFail("Not supported"); }
-    protected visitQueryExpression(): never { return assertFail("Not supported"); }
+
+    // QueryExpression[Await] :
+    //     FromClause[?Await] QueryBody[Await]
+    //
+    // QueryBody[Await] :
+    //     QueryBodyClauses[?Await]? SelectOrGroupClause[?Await] QueryContinuation[?Await]?
+    //
+    // QueryContinuation[Await] :
+    //     `into` BindingIdentifier[+In, ?Await] QueryBody[?Await]
+    protected visitQueryExpression(node: QueryExpression): Expression {
+        return this.transformQueryBodyClause(node.query).expression;
+    }
 
     private bindSequence(binding: SequenceBinding, ensureQuery: boolean) {
-        let expression = this.visitAssignmentExpressionOrHigher(binding.expression);
+        let expression = this.visit(binding.expression);
         if (ensureQuery || binding.withHierarchy || binding.hierarchyAxisKeyword) {
-            expression = binding.awaitKeyword ? asAsyncQuery(expression) : asQuery(expression);
-            expression = binding.withHierarchy ? callQueryMethod(expression, "toHierarchy", [this.visitAssignmentExpressionOrHigher(binding.withHierarchy)]) : expression;
+            expression = binding.await ? asAsyncQuery(expression) : asQuery(expression);
+            expression = binding.withHierarchy ? callQueryMethod(expression, "toHierarchy", [this.visit(binding.withHierarchy)]) : expression;
             expression = binding.hierarchyAxisKeyword ? callQueryMethod(expression, getAxis(binding.hierarchyAxisKeyword), []) : expression;
         }
         return expression;
     }
 
-    private bindOuterSource(context: QueryContext, binding: SequenceBinding | undefined) {
+    private bindOuterSource(context: QueryContext, binding: SequenceBinding) {
         let expression = context.expression;
-        if (binding && binding.awaitKeyword && !context.async) expression = asAsyncQuery(expression);
+        if (binding.await && !context.async) expression = asAsyncQuery(expression);
         return expression;
     }
 
@@ -209,16 +178,21 @@ export class Transformer extends ExpressionVisitor {
     //  $iq.fromAsync(a)
     //      .select(b => b)
     //
+    //  > from { b } in a
+    //  > select b
+    //
+    //  $iq.from(a)
+    //      .select(({ b }) => b)
+    //
     private transformFromClause(node: FromClause): QueryContext {
         const context = node.outerClause && this.transformQueryBodyClause(node.outerClause);
-        let fromBuilder: QueryBuilderBase = new StartQuery(node.sequenceBinding.name, !!node.sequenceBinding.awaitKeyword);
-        let expression: AssignmentExpressionOrHigher = this.bindSequence(node.sequenceBinding, !node.outerClause);
+        let fromBuilder: QueryBuilderBase = new StartQuery(node.sequenceBinding.name, !!node.sequenceBinding.await);
+        let expression: Expression = this.bindSequence(node.sequenceBinding, !node.outerClause);
         if (context) {
-            const asyncKeyword = node.sequenceBinding.awaitKeyword ? Expr.token(SyntaxKind.AsyncKeyword) : undefined;
             fromBuilder = new JoinQuery(context, fromBuilder);
             expression = callQueryMethod(this.bindOuterSource(context, node.sequenceBinding), "selectMany", [
-                Expr.arrow(undefined, [context.parameter], undefined, expression),
-                Expr.arrow(asyncKeyword, [context.parameter, node.sequenceBinding.name], undefined, fromBuilder.createBindingsExpression())
+                Syntax.Arrow(false, [context.parameter], undefined, expression),
+                Syntax.Arrow(node.sequenceBinding.await, [context.parameter, node.sequenceBinding.name], undefined, fromBuilder.createBindingsExpression())
             ]);
         }
         return fromBuilder.finishContext(expression);
@@ -238,9 +212,8 @@ export class Transformer extends ExpressionVisitor {
     private transformLetClause(node: LetClause): QueryContext {
         const context = this.transformQueryBodyClause(node.outerClause);
         const letBuilder = new AddLocal(context, node.name);
-        const asyncKeyword = context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined;
         const expression = callQueryMethod(context.expression, "select", [
-            Expr.arrow(asyncKeyword, [context.parameter], undefined, letBuilder.createBindingsExpression(node.name, this.visitAssignmentExpressionOrHigher(node.expression)))
+            Syntax.Arrow(context.async, [context.parameter], undefined, letBuilder.createBindingsExpression(node.name, this.visit(node.expression)))
         ]);
         return letBuilder.finishContext(expression);
     }
@@ -259,9 +232,8 @@ export class Transformer extends ExpressionVisitor {
     private transformWhereClause(node: WhereClause): QueryContext {
         const context = this.transformQueryBodyClause(node.outerClause);
         const whereBuilder = new CopyQuery(context);
-        const asyncKeyword = context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined;
         const expression = callQueryMethod(context.expression, "where", [
-            Expr.arrow(asyncKeyword, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(node.expression))
+            Syntax.Arrow(context.async, [context.parameter], undefined, this.visit(node.expression))
         ]);
         return whereBuilder.finishContext(expression);
     }
@@ -320,11 +292,11 @@ export class Transformer extends ExpressionVisitor {
             const methodName = first
                 ? isDescending(comparator) ? "orderByDescending" : "orderBy"
                 : isDescending(comparator) ? "thenByDescending" : "thenBy";
-            const argumentList: Argument[] = [
-                Expr.arrow(undefined, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(comparator.expression))
+            const argumentList: (Argument | Expression)[] = [
+                Syntax.Arrow(false, [context.parameter], undefined, this.visit(comparator.expression))
             ];
             if (comparator.usingExpression) {
-                argumentList.push(this.visitAssignmentExpressionOrHigher(comparator.usingExpression));
+                argumentList.push(this.visit(comparator.usingExpression));
             }
             expression = callQueryMethod(expression, methodName, argumentList);
             first = false;
@@ -354,10 +326,9 @@ export class Transformer extends ExpressionVisitor {
         const groupBuilder = node.into
             ? new StartQuery(node.into, context.async)
             : new CopyQuery(context);
-        const asyncKeyword = context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined;
         const expression: AssignmentExpressionOrHigher = callQueryMethod(context.expression, "groupBy", [
-            Expr.arrow(undefined, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(node.keySelector)),
-            Expr.arrow(asyncKeyword, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(node.elementSelector))
+            Syntax.Arrow(false, [context.parameter], undefined, this.visit(node.keySelector)),
+            Syntax.Arrow(context.async, [context.parameter], undefined, this.visit(node.elementSelector))
         ]);
         return groupBuilder.finishContext(expression);
     }
@@ -392,13 +363,12 @@ export class Transformer extends ExpressionVisitor {
     //
     private transformJoinClause(node: JoinClause): QueryContext {
         const context = this.transformQueryBodyClause(node.outerClause);
-        const joinBuilder = new JoinQuery(context, new StartQuery(node.into || node.sequenceBinding.name, !!node.sequenceBinding.awaitKeyword));
-        const asyncKeyword = node.sequenceBinding.awaitKeyword ? Expr.token(SyntaxKind.AsyncKeyword) : undefined;
+        const joinBuilder = new JoinQuery(context, new StartQuery(node.into || node.sequenceBinding.name, !!node.sequenceBinding.await));
         const expression = callQueryMethod(this.bindOuterSource(context, node.sequenceBinding), node.into ? "groupJoin" : "join", [
             this.bindSequence(node.sequenceBinding, false),
-            Expr.arrow(undefined, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(node.outerKeySelector)),
-            Expr.arrow(undefined, [node.sequenceBinding.name], undefined, this.visitAssignmentExpressionOrHigher(node.keySelector)),
-            Expr.arrow(asyncKeyword, [context.parameter, node.into || node.sequenceBinding.name], undefined, joinBuilder.createBindingsExpression())
+            Syntax.Arrow(false, [context.parameter], undefined, this.visit(node.outerKeySelector)),
+            Syntax.Arrow(false, [node.sequenceBinding.name], undefined, this.visit(node.keySelector)),
+            Syntax.Arrow(node.sequenceBinding.await, [context.parameter, node.into || node.sequenceBinding.name], undefined, joinBuilder.createBindingsExpression())
         ]);
         return joinBuilder.finishContext(expression);
     }
@@ -426,7 +396,7 @@ export class Transformer extends ExpressionVisitor {
             ? new StartQuery(node.into, context.async)
             : new CopyQuery(context);
         const expression = callQueryMethod(context.expression, "select", [
-            Expr.arrow(context.async ? Expr.token(SyntaxKind.AsyncKeyword) : undefined, [context.parameter], undefined, this.visitAssignmentExpressionOrHigher(node.expression))
+            Syntax.Arrow(context.async, [context.parameter], undefined, this.visit(node.expression))
         ]);
         return selectBuilder.finishContext(expression);
     }
@@ -456,39 +426,27 @@ export class Transformer extends ExpressionVisitor {
             case SyntaxKind.SelectClause: return this.transformSelectClause(node);
         }
     }
-
-    // QueryExpression[Await] :
-    //     FromClause[?Await] QueryBody[Await]
-    //
-    // QueryBody[Await] :
-    //     QueryBodyClauses[?Await]? SelectOrGroupClause[?Await] QueryContinuation[?Await]?
-    //
-    // QueryContinuation[Await] :
-    //     `into` BindingIdentifier[+In, ?Await] QueryBody[?Await]
-    private transformQueryExpression(node: QueryExpression) {
-        return this.transformQueryBodyClause(node.query).expression;
-    }
 }
 
-function sameReference(left: Expression, right: Expression) {
+function sameReference(left: Expression | Identifier, right: Expression | Identifier) {
     return left === right
-        || (left.kind === SyntaxKind.Identifier && right.kind === SyntaxKind.Identifier && left.text === right.text);
+        || (isIdentifier(left) && isIdentifier(right) && left.text === right.text);
 }
 
-function asQuery(expression: AssignmentExpressionOrHigher) {
-    return Expr.call(Expr.property(Expr.identifier("$iq"), "from"), [expression]);
+function asQuery(expression: Expression) {
+    return Syntax.Call(Syntax.Property(Syntax.IdentifierReference("$iq"), "from"), [expression]);
 }
 
-function asAsyncQuery(expression: AssignmentExpressionOrHigher) {
-    return Expr.call(Expr.property(Expr.identifier("$iq"), "fromAsync"), [expression]);
+function asAsyncQuery(expression: Expression) {
+    return Syntax.Call(Syntax.Property(Syntax.IdentifierReference("$iq"), "fromAsync"), [expression]);
 }
 
-function callQueryMethod(expression: AssignmentExpressionOrHigher, method: Extract<keyof OrderedHierarchyQuery<any>, string>, argumentList: ReadonlyArray<Argument>) {
-    return Expr.call(Expr.property(expression, method), argumentList);
+function callQueryMethod(expression: Expression, method: Extract<keyof OrderedHierarchyQuery<any>, string>, argumentList: ReadonlyArray<Argument | Expression>) {
+    return Syntax.Call(Syntax.Property(expression, method), argumentList);
 }
 
-function getAxis(hierarchyAxisKeyword: HierarchyAxisKeyword) {
-    switch (hierarchyAxisKeyword.kind) {
+function getAxis(hierarchyAxisKeyword: HierarchyAxisKeywordKind) {
+    switch (hierarchyAxisKeyword) {
         case SyntaxKind.RootofKeyword: return "root";
         case SyntaxKind.ParentofKeyword: return "parents";
         case SyntaxKind.ChildrenofKeyword: return "children";
@@ -503,6 +461,5 @@ function getAxis(hierarchyAxisKeyword: HierarchyAxisKeyword) {
 }
 
 function isDescending(comparator: OrderbyComparator) {
-    return comparator.directionToken !== undefined
-        && comparator.directionToken.kind === SyntaxKind.DescendingKeyword;
+    return comparator.direction === SyntaxKind.DescendingKeyword;
 }

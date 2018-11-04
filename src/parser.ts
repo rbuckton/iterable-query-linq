@@ -1,29 +1,29 @@
-import { SyntaxKind, TokenKind, TokenNode, QueryBodyClause, FromClause, LetClause, WhereClause,
-    OrderbyClause, OrderbyComparator, GroupClause, JoinClause, Identifier, Expression,
+import { SyntaxKind, Token, QueryBodyClause, FromClause, LetClause, WhereClause,
+    OrderbyClause, OrderbyComparator, GroupClause, JoinClause, Expression,
     ArrayLiteral, ObjectLiteral, NewExpression, PropertyAccessExpression,
     ElementAccessExpression, Elision, SpreadElement, PropertyDefinition,
-    ShorthandPropertyDefinition, PropertyName, ComputedPropertyName, isKeywordKind,
-    QueryExpression, PrefixUnaryOperatorKind, isPostfixUnaryOperatorKind, UnaryExpressionOrHigher,
+    ShorthandPropertyDefinition, PropertyName, ComputedPropertyName, isKeyword,
+    QueryExpression, PrefixUnaryOperator, isPostfixUnaryOperator, UnaryExpressionOrHigher,
     LeftHandSideExpressionOrHigher, PrimaryExpression, isTextLiteralKind, MemberExpressionOrHigher,
     TextLiteralKind, TextLiteralNode, ArrayLiteralElement, ObjectLiteralElement, Argument,
-    BinaryOperatorKind, SelectClause, AssignmentExpressionOrHigher, Node,
-    isHierarchyAxisKeywordKind, Syntax, getPos, getEnd, BindingElement, BindingRestElement,
+    BinaryOperator, SelectClause, AssignmentExpressionOrHigher, Node,
+    isHierarchyAxisKeywordKind, BindingElement, BindingRestElement,
     BindingName, ObjectBindingPattern, ArrayBindingPattern, ArrayBindingPatternElement,
     CoverParenthesizedExpressionAndArrowParameterList, isLeftHandSideExpressionOrHigher,
     CoverInitializedName, BindingIdentifier, IdentifierReference, 
     ObjectBindingPatternElement, BindingRestProperty, BindingProperty, ShorthandBindingProperty,
     ObjectAssignmentPattern, ArrayAssignmentPattern, ObjectAssignmentPatternElement,
     AssignmentRestProperty, ShorthandAssignmentProperty, AssignmentProperty, AssignmentElement,
-    ArrayAssignmentPatternElement, AssignmentRestElement, isAssignmentOperatorKind,
-    AssignmentOperatorKind, AssignmentExpression, BinaryExpressionOrHigher,
+    ArrayAssignmentPatternElement, AssignmentRestElement, isAssignmentOperator,
+    AssignmentOperator, AssignmentExpression, BinaryExpressionOrHigher,
     CommaListExpression, PrefixUnaryExpression, Parameter, SequenceBinding,
-    HierarchyAxisKeyword, isECMAScriptReservedWordKind,
+    isECMAScriptReservedWord, IdentifierName,
+    Syntax, createTextRange, HierarchyAxisKeywordKind, ThisExpression, NullLiteral, BooleanLiteral,
+    SyntaxUpdate
 } from "./types";
 import { Scanner, tokenToString } from "./scanner";
-import { Expr, createTextRange, ExprUpdate } from "./factory";
 import { RecoverableSyntaxError, UnrecoverableSyntaxError } from "./errors";
-import { BinaryPrecedence, getBinaryOperatorPrecedence, assertNever, assertFail } from "./utils";
-import { visitList } from "./visitor";
+import { BinaryPrecedence, getBinaryOperatorPrecedence, assertNever, assertFail, visitList } from "./utils";
 
 /** @internal */
 export class Parser {
@@ -46,7 +46,7 @@ export class Parser {
         // treat as inside expression statement
         if (this.token() === SyntaxKind.OpenBraceToken) return this.errorAtToken("Unexpected token.");
         const expression = this.parseAndRefineExpression(/*In*/ true, /*Await*/ this._async);
-        this.expectToken(SyntaxKind.EndOfFileToken);
+        if (this.token() !== SyntaxKind.EndOfFileToken) return this.errorAtToken("Unexpected token.");
         return expression;
     }
 
@@ -86,18 +86,23 @@ export class Parser {
         return this.errorAtPosEnd(message, this._scanner.tokenPos(), this._scanner.textPos(), recoverable);
     }
 
-    private errorAtNode(message: string, node: Node, recoverable?: boolean) {
-        return this.errorAtPosEnd(message, getPos(node), getEnd(node), recoverable);
+    private errorAtNode(message: string, node: Syntax, recoverable?: boolean) {
+        return this.errorAtPosEnd(message, Syntax.pos(node), Syntax.end(node), recoverable);
     }
 
-    private expectToken(kind: TokenKind) {
+    private readToken<Kind extends Token>(kind: Kind): Kind {
+        this.expectToken(kind);
+        return kind;
+    }
+
+    private expectToken(kind: Token) {
         if (this.token() !== kind) {
             this.errorAtToken(`'${tokenToString(kind)}' expected.`, /*recoverable*/ true);
         }
         this.nextToken();
     }
 
-    private optionalToken(kind: TokenKind) {
+    private optionalToken(kind: Token) {
         if (this.token() === kind) {
             this.nextToken();
             return true;
@@ -108,17 +113,6 @@ export class Parser {
     private listElement<T>(value: T, endToken: SyntaxKind): T {
         if (this.token() !== endToken) this.expectToken(SyntaxKind.CommaToken);
         return value;
-    }
-
-    private parseToken<Kind extends TokenKind>(kind: Kind): TokenNode<Kind> {
-        const pos = this.pos();
-        this.expectToken(kind);
-        // Tokens cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.token(kind), pos));
-    }
-
-    private parseOptionalToken<Kind extends TokenKind>(kind: Kind): TokenNode<Kind> | undefined {
-        return this.token() === kind ? this.parseToken(kind) : undefined;
     }
 
     private parseLiteral<Kind extends TextLiteralKind>(kind: Kind): TextLiteralNode<Kind> {
@@ -135,22 +129,22 @@ export class Parser {
         const flags = this._scanner.tokenFlags();
         this.nextToken();
         // Text literals cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.literal(kind, text, flags), pos));
+        return this.finishRefine(this.finishNode(Syntax.Literal(kind, text, flags), pos));
     }
 
     private parseBindingIdentifier(Await: boolean): BindingIdentifier {
-        return this.parseIdentifier(/*allowReservedWords*/ false, !Await);
+        return this.parseIdentifier(/*allowReservedWords*/ false, !Await, Syntax.BindingIdentifier);
     }
 
     private parseIdentifierReference(Await: boolean): IdentifierReference {
-        return this.parseIdentifier(/*allowReservedWords*/ false, !Await);
+        return this.parseIdentifier(/*allowReservedWords*/ false, !Await, Syntax.IdentifierReference);
     }
 
-    private parseIdentifierName(): IdentifierReference {
-        return this.parseIdentifier(/*allowReservedWords*/ true, /*allowAwait*/ true);
+    private parseIdentifierName(): IdentifierName {
+        return this.parseIdentifier(/*allowReservedWords*/ true, /*allowAwait*/ true, Syntax.IdentifierName);
     }
 
-    private parseIdentifier(allowReservedWords: boolean, allowAwait: boolean): Identifier {
+    private parseIdentifier<T extends BindingIdentifier | IdentifierReference | IdentifierName>(allowReservedWords: boolean, allowAwait: boolean, factory: (text: string) => T): T {
         if (!mayBeIdentifier(this.token(), allowReservedWords, allowAwait)) {
             return this.errorAtToken("Identifier expected.");
         }
@@ -158,7 +152,7 @@ export class Parser {
         const text = this._scanner.tokenText();
         this.nextToken();
         // Identifier cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.identifier(text), pos));
+        return this.finishRefine(this.finishNode(factory(text), pos));
     }
 
     private parseComputedPropertyName(Await: boolean): ComputedPropertyName {
@@ -167,7 +161,7 @@ export class Parser {
         const expression = this.parseAndRefineExpression(/*In*/ true, Await);
         this.expectToken(SyntaxKind.CloseBracketToken);
         // ComputedPropertyName cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.computedPropertyName(expression), pos));
+        return this.finishRefine(this.finishNode(Syntax.ComputedPropertyName(expression), pos));
     }
 
     private parsePropertyName(Await: boolean): PropertyName {
@@ -181,10 +175,10 @@ export class Parser {
         }
     }
 
-    private tryParseHierarchyAxisKeyword(): HierarchyAxisKeyword | undefined {
+    private tryParseHierarchyAxisKeyword(): HierarchyAxisKeywordKind | undefined {
         const token = this.token();
         if (isHierarchyAxisKeywordKind(token)) {
-            return this.parseToken(token);
+            return this.readToken(token);
         }
     }
 
@@ -195,7 +189,7 @@ export class Parser {
     //     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
     private parseSequenceBinding(Await: boolean): SequenceBinding {
         const pos = this.pos();
-        const awaitKeyword = Await ? this.parseOptionalToken(SyntaxKind.AwaitKeyword) : undefined;
+        const awaitKeyword = Await ? this.optionalToken(SyntaxKind.AwaitKeyword) : false;
         const name = this.parseBindingIdentifier(Await);
         this.expectToken(SyntaxKind.InKeyword);
         const hierarchyAxisKeyword = this.tryParseHierarchyAxisKeyword();
@@ -206,7 +200,7 @@ export class Parser {
             withHierarchy = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         }
         // SequenceBinding cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.sequenceBinding(awaitKeyword, name, hierarchyAxisKeyword, expression, withHierarchy), pos));
+        return this.finishRefine(this.finishNode(Syntax.SequenceBinding(awaitKeyword, name, hierarchyAxisKeyword, expression, withHierarchy), pos));
     }
 
     // FromClause[Await] :
@@ -216,7 +210,7 @@ export class Parser {
         this.expectToken(SyntaxKind.FromKeyword);
         const sequenceBinding = this.parseSequenceBinding(Await);
         // FromClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.fromClause(outerClause, sequenceBinding), pos));
+        return this.finishRefine(this.finishNode(Syntax.FromClause(outerClause, sequenceBinding), pos));
     }
 
     // LetClause[Await] :
@@ -228,7 +222,7 @@ export class Parser {
         this.expectToken(SyntaxKind.EqualsToken);
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         // LetClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.letClause(outerClause, name, expression), pos));
+        return this.finishRefine(this.finishNode(Syntax.LetClause(outerClause, name, expression), pos));
     }
 
     // WhereClause[Await] :
@@ -238,7 +232,7 @@ export class Parser {
         this.expectToken(SyntaxKind.WhereKeyword);
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         // WhereClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.whereClause(outerClause, expression), pos));
+        return this.finishRefine(this.finishNode(Syntax.WhereClause(outerClause, expression), pos));
     }
 
     // OrderbyClause[Await] :
@@ -250,7 +244,7 @@ export class Parser {
         do comparators.push(this.parseOrderbyComparator(Await));
         while (this.optionalToken(SyntaxKind.CommaToken));
         // OrderbyClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.orderbyClause(outerClause, comparators), pos));
+        return this.finishRefine(this.finishNode(Syntax.OrderbyClause(outerClause, comparators), pos));
     }
 
     // OrderbyComparatorList[Await] :
@@ -267,12 +261,13 @@ export class Parser {
     private parseOrderbyComparator(Await: boolean): OrderbyComparator {
         const pos = this.pos();
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        const directionToken =
-            this.parseOptionalToken(SyntaxKind.AscendingKeyword) ||
-            this.parseOptionalToken(SyntaxKind.DescendingKeyword);
+        const direction =
+            this.optionalToken(SyntaxKind.AscendingKeyword) ? SyntaxKind.AscendingKeyword :
+            this.optionalToken(SyntaxKind.DescendingKeyword) ? SyntaxKind.DescendingKeyword :
+            undefined;
         const usingExpression = this.optionalToken(SyntaxKind.UsingKeyword) ? this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await) : undefined;
         // OrderbyComparator cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.orderbyComparator(expression, directionToken, usingExpression), pos));
+        return this.finishRefine(this.finishNode(Syntax.OrderbyComparator(expression, direction, usingExpression), pos));
     }
 
     // GroupClause[Await] :
@@ -285,7 +280,7 @@ export class Parser {
         const keySelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
         // GroupClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.groupClause(outerClause, elementSelector, keySelector, into), pos));
+        return this.finishRefine(this.finishNode(Syntax.GroupClause(outerClause, elementSelector, keySelector, into), pos));
     }
 
     // JoinClause[Await] :
@@ -301,7 +296,7 @@ export class Parser {
         const keySelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
         // JoinClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.joinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), pos));
+        return this.finishRefine(this.finishNode(Syntax.JoinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), pos));
     }
 
     // SelectClause[Await] :
@@ -312,7 +307,7 @@ export class Parser {
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
         // SelectClause cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.selectClause(outerClause, expression, into), pos));
+        return this.finishRefine(this.finishNode(Syntax.SelectClause(outerClause, expression, into), pos));
     }
 
     // QueryBodyClause[Await] :
@@ -362,7 +357,7 @@ export class Parser {
             return this.errorAtToken("A query must end with either a 'select' or 'group' clause.");
         }
         // QueryExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.query(outerClause), pos));
+        return this.finishRefine(this.finishNode(Syntax.Query(outerClause), pos));
     }
 
     private parseCoverParenthesizedExpressionAndArrowParameterList(Await: boolean): CoverParenthesizedExpressionAndArrowParameterList {
@@ -371,18 +366,18 @@ export class Parser {
         const expression =
             this.token() !== SyntaxKind.CloseParenToken &&
             this.token() !== SyntaxKind.DotDotDotToken ? this.parseExpression(/*In*/ true, Await) : undefined;
-        const commaToken = expression ? this.parseOptionalToken(SyntaxKind.CommaToken) : undefined;
-        const dotDotDotToken = !expression || commaToken ? this.parseOptionalToken(SyntaxKind.DotDotDotToken) : undefined;
-        const name = dotDotDotToken ? this.parseBindingName(Await) : undefined;
-        const closeParenToken = this.parseToken(SyntaxKind.CloseParenToken);
+        const rest = (!expression || this.optionalToken(SyntaxKind.CommaToken)) && this.token() === SyntaxKind.DotDotDotToken 
+            ? this.parseBindingRestElement(Await) 
+            : undefined;
+        this.expectToken(SyntaxKind.CloseParenToken);
         // CoverParenthesizedExpressionAndArrowParameterList can be further refined
-        return this.finishNode(createCoverParenthesizedExpressionAndArrowParameterList(expression, commaToken, dotDotDotToken, name, closeParenToken), pos);
+        return this.finishNode(createCoverParenthesizedExpressionAndArrowParameterList(expression, rest), pos);
     }
 
     private parseElision(): Elision {
         const pos = this.pos();
         // Elision cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.elision(), pos));
+        return this.finishRefine(this.finishNode(Syntax.Elision(), pos));
     }
 
     private parseAndRefineSpreadElement(Await: boolean): SpreadElement {
@@ -393,7 +388,7 @@ export class Parser {
         const pos = this.pos();
         this.expectToken(SyntaxKind.DotDotDotToken);
         // SpreadElement can be further refined
-        return this.finishNode(Expr.spreadElement(this.parseLeftHandSideExpressionOrHigher(Await)), pos);
+        return this.finishNode(Syntax.SpreadElement(this.parseLeftHandSideExpressionOrHigher(Await)), pos);
     }
 
     private parseArrayLiteralElement(Await: boolean): ArrayLiteralElement {
@@ -413,7 +408,7 @@ export class Parser {
         }
         this.expectToken(SyntaxKind.CloseBracketToken);
         // ArrayLiteral can be further refined
-        return this.finishNode(Expr.arrayLiteral(elements), pos);
+        return this.finishNode(Syntax.ArrayLiteral(elements), pos);
     }
 
     private parsePropertyDefinition(Await: boolean): PropertyDefinition | ShorthandPropertyDefinition | CoverInitializedName {
@@ -421,16 +416,16 @@ export class Parser {
         const name = this.parsePropertyName(Await);
         if (this.optionalToken(SyntaxKind.ColonToken)) {
             // PropertyDefinition can be further refined
-            return this.finishNode(Expr.propertyDefinition(name, this.parseAssignmentExpressionOrHigher(/*In*/ true, Await)), pos);
+            return this.finishNode(Syntax.PropertyDefinition(name, this.parseAssignmentExpressionOrHigher(/*In*/ true, Await)), pos);
         }
-        if (name.kind !== SyntaxKind.Identifier) return this.errorAtToken(`Unexpected token.`);
+        if (name.kind !== SyntaxKind.IdentifierName) return this.errorAtToken(`Unexpected token.`);
         const initializer = this.parseInitializer(Await);
         if (initializer) {
             // CoverInitializedName can be further refined
-            return this.finishNode(createCoverInitializedName(name, initializer), pos);
+            return this.finishNode(createCoverInitializedName(this.refineIdentifierReference(name), initializer), pos);
         }
         // ShorthandPropertyDefinition can be further refined
-        return this.finishNode(Expr.shorthandPropertyDefinition(name), pos);
+        return this.finishNode(Syntax.ShorthandPropertyDefinition(this.refineIdentifierReference(name)), pos);
     }
 
     private parseObjectLiteralElement(Await: boolean): ObjectLiteralElement {
@@ -453,7 +448,7 @@ export class Parser {
         }
         this.expectToken(SyntaxKind.CloseBraceToken);
         // ObjectLiteral can be further refined
-        return this.finishNode(Expr.objectLiteral(properties), pos);
+        return this.finishNode(Syntax.ObjectLiteral(properties), pos);
     }
 
     private parseArgument(Await: boolean) {
@@ -479,7 +474,25 @@ export class Parser {
         const expression = this.parseMemberExpressionRest(Await, this.parseAndRefinePrimaryExpression(Await));
         const argumentList = this.token() === SyntaxKind.OpenParenToken ? this.parseArgumentList(Await) : undefined;
         // NewExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.new(expression, argumentList), pos));
+        return this.finishRefine(this.finishNode(Syntax.New(expression, argumentList), pos));
+    }
+
+    private parseThisExpression(): ThisExpression {
+        const pos = this.pos();
+        this.expectToken(SyntaxKind.ThisKeyword);
+        return this.finishRefine(this.finishNode(Syntax.This(), pos));
+    }
+
+    private parseNullLiteral(): NullLiteral {
+        const pos = this.pos();
+        this.expectToken(SyntaxKind.NullKeyword);
+        return this.finishRefine(this.finishNode(Syntax.Null(), pos));
+    }
+
+    private parseBooleanLiteral(kind: SyntaxKind.TrueKeyword | SyntaxKind.FalseKeyword): BooleanLiteral {
+        const pos = this.pos();
+        this.expectToken(kind);
+        return this.finishRefine(this.finishNode(Syntax.Boolean(kind === SyntaxKind.TrueKeyword), pos));
     }
 
     private parseAndRefinePrimaryExpression(Await: boolean): PrimaryExpression {
@@ -489,12 +502,13 @@ export class Parser {
     private parsePrimaryExpression(Await: boolean): PrimaryExpression {
         const token = this._scanner.rescanSlash();
         switch (token) {
+            case SyntaxKind.ThisKeyword: return this.parseThisExpression();
             case SyntaxKind.NumberLiteral: return this.parseLiteral(token);
             case SyntaxKind.StringLiteral: return this.parseLiteral(token);
             case SyntaxKind.RegularExpressionLiteral: return this.parseLiteral(SyntaxKind.RegularExpressionLiteral);
-            case SyntaxKind.NullKeyword: return this.parseToken(token);
-            case SyntaxKind.TrueKeyword: return this.parseToken(token);
-            case SyntaxKind.FalseKeyword: return this.parseToken(token);
+            case SyntaxKind.NullKeyword: return this.parseNullLiteral();
+            case SyntaxKind.TrueKeyword: 
+            case SyntaxKind.FalseKeyword: return this.parseBooleanLiteral(token);
             case SyntaxKind.OpenParenToken: return this.parseCoverParenthesizedExpressionAndArrowParameterList(Await);
             case SyntaxKind.OpenBracketToken: return this.parseArrayLiteral(Await);
             case SyntaxKind.OpenBraceToken: return this.parseObjectLiteral(Await);
@@ -505,17 +519,17 @@ export class Parser {
     }
 
     private parsePropertyAccessExpressionRest(expression: LeftHandSideExpressionOrHigher): PropertyAccessExpression {
-        const pos = getPos(expression);
+        const pos = Syntax.pos(expression);
         // PropertyAccessExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.property(this.refineLeftHandSideExpressionOrHigher(expression), this.parseIdentifierName()), pos));
+        return this.finishRefine(this.finishNode(Syntax.Property(this.refineLeftHandSideExpressionOrHigher(expression), this.parseIdentifierName()), pos));
     }
 
     private parseElementAccessExpressionRest(Await: boolean, expression: LeftHandSideExpressionOrHigher): ElementAccessExpression {
-        const pos = getPos(expression);
+        const pos = Syntax.pos(expression);
         const argumentExpression = this.parseAndRefineExpression(/*In*/ true, Await);
         this.expectToken(SyntaxKind.CloseBracketToken);
         // ElementAccessExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.index(this.refineLeftHandSideExpressionOrHigher(expression), argumentExpression), pos));
+        return this.finishRefine(this.finishNode(Syntax.Index(this.refineLeftHandSideExpressionOrHigher(expression), argumentExpression), pos));
     }
 
     private parseMemberExpressionRest(Await: boolean, expression: LeftHandSideExpressionOrHigher): MemberExpressionOrHigher {
@@ -541,7 +555,7 @@ export class Parser {
             expression = this.parseMemberExpressionRest(Await, expression);
             if (this.token() === SyntaxKind.OpenParenToken) {
                 // CallExpression cannot be further refined
-                expression = this.finishRefine(this.finishNode(Expr.call(this.refineLeftHandSideExpressionOrHigher(expression), this.parseArgumentList(Await)), getPos(expression)));
+                expression = this.finishRefine(this.finishNode(Syntax.Call(this.refineLeftHandSideExpressionOrHigher(expression), this.parseArgumentList(Await)), Syntax.pos(expression)));
                 continue;
             }
             return expression;
@@ -552,18 +566,18 @@ export class Parser {
         return this.parseCallExpressionRest(Await, this.parseMemberExpressionOrHigher(Await));
     }
 
-    private parsePrefixUnaryExpression(Await: boolean, kind: PrefixUnaryOperatorKind): PrefixUnaryExpression {
-        const operatorToken = this.parseToken(kind);
-        if (kind === SyntaxKind.AwaitKeyword && !this._async) return this.errorAtNode(`'await' not supported in a synchronous 'linq' block.`, operatorToken, false);
+    private parsePrefixUnaryExpression(Await: boolean, kind: PrefixUnaryOperator): PrefixUnaryExpression {
+        if (kind === SyntaxKind.AwaitKeyword && !this._async) return this.errorAtToken(`'await' not supported in a synchronous 'linq' block.`, false);
+        const pos = this.pos();
         // PrefixUnaryExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.prefixUnary(operatorToken, this.parseAndRefineUnaryExpressionOrHigher(Await)), getPos(operatorToken)));
+        return this.finishRefine(this.finishNode(Syntax.PrefixUnary(this.readToken(kind), this.parseAndRefineUnaryExpressionOrHigher(Await)), pos));
     }
 
     private parsePostfixUnaryExpressionRest(expression: LeftHandSideExpressionOrHigher): UnaryExpressionOrHigher {
         const token = this.token();
-        if (isPostfixUnaryOperatorKind(token)) {
+        if (isPostfixUnaryOperator(token)) {
             // PostixUnaryExpression cannot be further refined
-            return this.finishRefine(this.finishNode(Expr.postfixUnary(this.refineLeftHandSideExpressionOrHigher(expression), this.parseToken(token)), getPos(expression)));
+            return this.finishRefine(this.finishNode(Syntax.PostfixUnary(this.refineLeftHandSideExpressionOrHigher(expression), this.readToken(token)), Syntax.pos(expression)));
         }
         return expression;
     }
@@ -596,10 +610,10 @@ export class Parser {
             if (!(token === SyntaxKind.AsteriskAsteriskToken ? newPrecedence >= precedence : newPrecedence > precedence)) break;
             if (token === SyntaxKind.InKeyword && !In) break;
             // BinaryExpression cannot be further refined
-            left = this.finishRefine(this.finishNode(Expr.binary(
+            left = this.finishRefine(this.finishNode(Syntax.Binary(
                 this.refineBinaryExpressionOrHigher(left),
-                this.parseToken(token as BinaryOperatorKind),
-                this.parseAndRefineBinaryExpressionOrHigher(newPrecedence >= BinaryPrecedence.ShiftExpression || In, Await, newPrecedence)), getPos(left)));
+                this.readToken(token as BinaryOperator),
+                this.parseAndRefineBinaryExpressionOrHigher(newPrecedence >= BinaryPrecedence.ShiftExpression || In, Await, newPrecedence)), Syntax.pos(left)));
         }
         return left;
     }
@@ -618,7 +632,7 @@ export class Parser {
         const whenTrue = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         this.expectToken(SyntaxKind.ColonToken);
         // ConditionalExpression cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.conditional(this.refineBinaryExpressionOrHigher(expression), whenTrue, this.parseAndRefineAssignmentExpressionOrHigher(In, Await)), getPos(expression)));
+        return this.finishRefine(this.finishNode(Syntax.Conditional(this.refineBinaryExpressionOrHigher(expression), whenTrue, this.parseAndRefineAssignmentExpressionOrHigher(In, Await)), Syntax.pos(expression)));
     }
 
     private parseBindingProperty(Await: boolean): BindingProperty | ShorthandBindingProperty {
@@ -627,14 +641,14 @@ export class Parser {
         if (this.optionalToken(SyntaxKind.ColonToken)) {
             const bindingElement = this.parseBindingElement(Await);
             // BindingProperty cannot be further refined
-            return this.finishRefine(this.finishNode(Expr.bindingProperty(name, bindingElement), pos));
+            return this.finishRefine(this.finishNode(Syntax.BindingProperty(name, bindingElement), pos));
         }
-        if (name.kind !== SyntaxKind.Identifier) {
+        if (name.kind !== SyntaxKind.IdentifierName) {
             return this.errorAtNode(`Identifier or binding pattern expected.`, name, false);
         }
         const initializer = this.parseInitializer(Await);
         // ShorthandBindingProperty cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.shorthandBindingProperty(name, initializer), pos));
+        return this.finishRefine(this.finishNode(Syntax.ShorthandBindingProperty(this.refineBindingIdentifier(name), initializer), pos));
     }
 
     private parseBindingRestProperty(Await: boolean): BindingRestProperty {
@@ -642,7 +656,7 @@ export class Parser {
         this.expectToken(SyntaxKind.DotDotDotToken);
         const name = this.parseBindingIdentifier(Await);
         // BindingRestProperty cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.bindingRestProperty(name), pos));
+        return this.finishRefine(this.finishNode(Syntax.BindingRestProperty(name), pos));
     }
 
     private parseObjectBindingPattern(Await: boolean): ObjectBindingPattern {
@@ -663,7 +677,7 @@ export class Parser {
         }
         this.expectToken(SyntaxKind.CloseBraceToken);
         // ObjectBindingPattern cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.objectBindingPattern(properties, rest), pos));
+        return this.finishRefine(this.finishNode(Syntax.ObjectBindingPattern(properties, rest), pos));
     }
 
     private parseBindingRestElement(Await: boolean): BindingRestElement {
@@ -671,7 +685,7 @@ export class Parser {
         this.expectToken(SyntaxKind.DotDotDotToken);
         const name = this.parseBindingName(Await);
         // BindingRestElement cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.bindingRestElement(name), pos));
+        return this.finishRefine(this.finishNode(Syntax.BindingRestElement(name), pos));
     }
 
     private parseBindingElement(Await: boolean): BindingElement {
@@ -679,7 +693,7 @@ export class Parser {
         const name = this.parseBindingName(Await);
         const initializer = this.parseInitializer(Await);
         // BindingElement cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.bindingElement(name, initializer), pos));
+        return this.finishRefine(this.finishNode(Syntax.BindingElement(name, initializer), pos));
     }
 
     private parseArrayBindingPattern(Await: boolean): ArrayBindingPattern {
@@ -703,7 +717,7 @@ export class Parser {
         }
         this.expectToken(SyntaxKind.CloseBracketToken);
         // ArrayBindingPattern cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.arrayBindingPattern(elements, rest), pos));
+        return this.finishRefine(this.finishNode(Syntax.ArrayBindingPattern(elements, rest), pos));
     }
 
     private parseBindingName(Await: boolean): BindingName {
@@ -740,11 +754,11 @@ export class Parser {
 
     private parseAsyncArrowFunction(In: boolean, Await: boolean) {
         const pos = this.pos();
-        const asyncKeyword = this.parseToken(SyntaxKind.AsyncKeyword);
+        this.expectToken(SyntaxKind.AsyncKeyword);
         const { parameters, rest } = this.parseParameterList(Await);
         this.expectToken(SyntaxKind.EqualsGreaterThanToken);
         // AsyncArrowFunction cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.arrow(asyncKeyword, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ true)), pos));
+        return this.finishRefine(this.finishNode(Syntax.Arrow(true, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ true)), pos));
     }
 
     private parseArrowFunctionRest(In: boolean, head: AssignmentExpressionOrHigher) {
@@ -752,7 +766,7 @@ export class Parser {
         this.expectToken(SyntaxKind.EqualsGreaterThanToken);
         if (this.token() === SyntaxKind.OpenBraceToken) return this.errorAtToken(`Expression expected.`);
         // ArrowFunction cannot be further refined
-        return this.finishRefine(this.finishNode(Expr.arrow(undefined, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ false)), getPos(head)));
+        return this.finishRefine(this.finishNode(Syntax.Arrow(false, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ false)), Syntax.pos(head)));
     }
 
     private parseAndRefineAssignmentExpressionOrHigher(In: boolean, Await: boolean) {
@@ -764,13 +778,13 @@ export class Parser {
         if (this.token() === SyntaxKind.AsyncKeyword) return this.parseAsyncArrowFunction(In, Await);
         const expression = this.parseBinaryExpressionOrHigher(In, Await, BinaryPrecedence.None);
         if (this.token() === SyntaxKind.EqualsGreaterThanToken) return this.parseArrowFunctionRest(In, expression);
-        if (isLeftHandSideExpressionOrHigher(expression) && isAssignmentOperatorKind(this.token())) {
-            const pos = getPos(expression);
+        if (isLeftHandSideExpressionOrHigher(expression) && isAssignmentOperator(this.token())) {
+            const pos = Syntax.pos(expression);
             // AssignmentExpression can be further refined
             return this.finishNode(
-                Expr.assign(
+                Syntax.Assign(
                     expression, // do not refine
-                    this.parseToken(this.token() as AssignmentOperatorKind),
+                    this.readToken(this.token() as AssignmentOperator),
                     this.parseAndRefineAssignmentExpressionOrHigher(In, Await)),
                 pos);
         }
@@ -790,9 +804,20 @@ export class Parser {
             }
             while (this.optionalToken(SyntaxKind.CommaToken));
             // CommaListExpression can be further refined
-            return this.finishNode(Expr.comma(expressions), getPos(left));
+            return this.finishNode(Syntax.CommaList(expressions), Syntax.pos(left));
         }
         return left;
+    }
+
+    private refineIdentifierReference(node: IdentifierName) {
+        return this.finishRefine(this.finishNode(Syntax.IdentifierReference(node.text), Syntax.pos(node), Syntax.end(node)));
+    }
+
+    private refineBindingIdentifier(node: IdentifierName | Expression) {
+        if (node.kind === SyntaxKind.IdentifierName || node.kind === SyntaxKind.IdentifierReference) {
+            return this.finishRefine(this.finishNode(Syntax.BindingIdentifier(node.text), Syntax.pos(node), Syntax.end(node)));
+        }
+        return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
     }
 
     private refinePrimaryExpression(node: PrimaryExpression): PrimaryExpression {
@@ -850,7 +875,7 @@ export class Parser {
     private refineObjectLiteral(node: ObjectLiteral) {
         for (const property of node.properties) {
             if (property.kind === SyntaxKind.CoverInitializedName) {
-                return this.errorAtPos(`Unexpected token.`, getEnd(property.name));
+                return this.errorAtPos(`Unexpected token.`, Syntax.end(property.name));
             }
         }
         return node;
@@ -861,15 +886,13 @@ export class Parser {
     }
 
     private refineParenthesizedExpression(node: CoverParenthesizedExpressionAndArrowParameterList) {
-        if (!node.expression || node.commaToken || node.dotDotDotToken || node.name) {
-            const lastToken = node.commaToken || node.dotDotDotToken || node.name || node.closeParenToken;
-            return this.errorAtNode(`Unexpected token.`, lastToken);
-        }
-        return this.finishRefine(this.finishNode(Expr.paren(this.refineExpression(node.expression)), getPos(node), getEnd(node)));
+        if (node.rest) return this.errorAtPos(`Unexpected token.`, Syntax.pos(node.rest));
+        if (!node.expression) return this.errorAtPos(`Expression expected.`, Syntax.end(node));
+        return this.finishRefine(this.finishNode(Syntax.Paren(this.refineExpression(node.expression)), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineSpreadElement(node: SpreadElement): SpreadElement {
-        return this.finishRefine(ExprUpdate.spreadElement(node, this.refineAssignmentExpressionOrHigher(node.expression)));
+        return this.finishRefine(SyntaxUpdate.SpreadElement(node, this.refineAssignmentExpressionOrHigher(node.expression)));
     }
 
     private refineArgument(node: Argument): Argument {
@@ -879,25 +902,25 @@ export class Parser {
     }
 
     private refineCommaListExpression(node: CommaListExpression) {
-        return this.finishRefine(ExprUpdate.comma(node, visitList(node.expressions, this.refineAssignmentExpressionOrHigher)));
+        return this.finishRefine(SyntaxUpdate.Comma(node, visitList(node.expressions, this.refineAssignmentExpressionOrHigher)));
     }
 
     private refineAssignmentRestProperty(node: SpreadElement): AssignmentRestProperty {
-        return this.finishNode(Expr.assignmentRestProperty(this.refineIdentifier(node.expression)), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.AssignmentRestProperty(node.expression), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineAssignmentProperty(node: PropertyDefinition): AssignmentProperty {
         const assignmentElement = this.refineAssignmentElement(node.initializer);
-        return this.finishNode(Expr.assignmentProperty(node.name, assignmentElement), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.AssignmentProperty(node.name, assignmentElement), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineShorthandAssignmentProperty(node: ShorthandPropertyDefinition | CoverInitializedName): ShorthandAssignmentProperty {
         switch (node.kind) {
             case SyntaxKind.ShorthandPropertyDefinition: {
-                return this.finishNode(Expr.shorthandAssignmentProperty(node.name, undefined), getPos(node), getEnd(node));
+                return this.finishNode(Syntax.ShorthandAssignmentProperty(node.name, undefined), Syntax.pos(node), Syntax.end(node));
             }
             case SyntaxKind.CoverInitializedName: {
-                return this.finishNode(Expr.shorthandAssignmentProperty(node.name, node.initializer), getPos(node), getEnd(node));
+                return this.finishNode(Syntax.ShorthandAssignmentProperty(node.name, node.initializer), Syntax.pos(node), Syntax.end(node));
             }
         }
     }
@@ -908,7 +931,7 @@ export class Parser {
         for (const property of node.properties) {
             switch (property.kind) {
                 case SyntaxKind.SpreadElement:
-                    if (rest) return this.errorAtPos(`Unexpected token.`, getPos(property));
+                    if (rest) return this.errorAtPos(`Unexpected token.`, Syntax.pos(property));
                     rest = this.refineAssignmentRestProperty(property);
                     continue;
                 case SyntaxKind.PropertyDefinition:
@@ -922,29 +945,29 @@ export class Parser {
                     return assertNever(property);
             }
         }
-        return this.finishNode(Expr.objectAssignmentPattern(properties, rest), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.ObjectAssignmentPattern(properties, rest), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineAssignmentElement(node: AssignmentExpressionOrHigher): AssignmentElement {
-        if (isCompoundAssignment(node)) return this.errorAtPos(`Unexpected token.`, getPos(node.operatorToken));
+        if (isCompoundAssignment(node)) return this.errorAtPos(`Unexpected token.`, Syntax.end(node.left));
         if (isSimpleAssignment(node)) {
             const target = this.refineAssignmentTarget(node.left);
             const initializer = node.right;
-            return this.finishNode(Expr.assignmentElement(target, initializer), getPos(node), getEnd(node));
+            return this.finishNode(Syntax.AssignmentElement(target, initializer), Syntax.pos(node), Syntax.end(node));
         }
         const target = this.refineAssignmentTarget(node);
-        return this.finishNode(Expr.assignmentElement(target, undefined), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.AssignmentElement(target, undefined), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineAssignmentRestElement(node: SpreadElement): AssignmentRestElement {
-        return this.finishNode(Expr.assignmentRestElement(this.refineAssignmentTarget(node.expression)), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.AssignmentRestElement(this.refineAssignmentTarget(node.expression)), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineArrayAssignmentPattern(node: ArrayLiteral): ArrayAssignmentPattern {
         const elements: ArrayAssignmentPatternElement[] = [];
         let rest: AssignmentRestElement | undefined;
         for (const element of node.elements) {
-            if (rest) return this.errorAtPos(`Unexpected token.`, getPos(element));
+            if (rest) return this.errorAtPos(`Unexpected token.`, Syntax.pos(element));
             switch (element.kind) {
                 case SyntaxKind.Elision:
                     elements.push(element);
@@ -957,7 +980,7 @@ export class Parser {
                     continue;
             }
         }
-        return this.finishNode(Expr.arrayAssignmentPattern(elements, rest), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.ArrayAssignmentPattern(elements, rest), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineAssignmentTarget(node: AssignmentExpressionOrHigher): LeftHandSideExpressionOrHigher {
@@ -972,31 +995,31 @@ export class Parser {
 
     private refineSimpleAssignment(node: SimpleAssignmentExpression) {
         const left = this.refineAssignmentTarget(node.left);
-        return this.finishNode(Expr.assign(left, node.operatorToken, node.right), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.Assign(left, node.operator, node.right), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineAssignmentExpression(node: AssignmentExpression) {
         if (isSimpleAssignment(node)) return this.refineSimpleAssignment(node);
         const left = this.refineLeftHandSideExpressionOrHigher(node.left);
         return node.left !== left
-            ? this.finishNode(Expr.assign(left, node.operatorToken, node.right), getPos(node))
+            ? this.finishNode(Syntax.Assign(left, node.operator, node.right), Syntax.pos(node))
             : node;
     }
 
-    private refineIdentifier(node: AssignmentExpressionOrHigher): Identifier {
-        if (node.kind !== SyntaxKind.Identifier) return this.errorAtPos(`Unexpected token.`, getPos(node));
-        return node;
-    }
+    // private refineIdentifier(node: AssignmentExpressionOrHigher): Identifier {
+    //     if (node.kind !== SyntaxKind.Identifier) return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
+    //     return node;
+    // }
 
     private refineBindingRestProperty(node: SpreadElement | BindingRestProperty): BindingRestProperty {
         if (node.kind === SyntaxKind.BindingRestProperty) {
             return this.finishRefine(node);
         }
-        return this.finishRefine(this.finishNode(Expr.bindingRestProperty(this.refineIdentifier(node.expression)), getPos(node), getEnd(node)));
+        return this.finishRefine(this.finishNode(Syntax.BindingRestProperty(this.refineBindingIdentifier(node.expression)), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineComputedPropertyName(node: ComputedPropertyName): ComputedPropertyName {
-        return this.finishRefine(ExprUpdate.computedPropertyName(node, this.refineExpression(node.expression)));
+        return this.finishRefine(SyntaxUpdate.ComputedPropertyName(node, this.refineExpression(node.expression)));
     }
 
     private refinePropertyName(node: PropertyName): PropertyName {
@@ -1007,21 +1030,21 @@ export class Parser {
 
     private refineBindingProperty(node: PropertyDefinition | BindingProperty): BindingProperty {
         if (node.kind === SyntaxKind.BindingProperty) {
-            return this.finishRefine(ExprUpdate.bindingProperty(node, this.refinePropertyName(node.propertyName), this.refineBindingElement(node.bindingElement)));
+            return this.finishRefine(SyntaxUpdate.BindingProperty(node, this.refinePropertyName(node.propertyName), this.refineBindingElement(node.bindingElement)));
         }
-        return this.finishRefine(this.finishNode(Expr.bindingProperty(node.name, this.refineBindingElement(node.initializer)), getPos(node), getEnd(node)));
+        return this.finishRefine(this.finishNode(Syntax.BindingProperty(node.name, this.refineBindingElement(node.initializer)), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineShorthandBindingProperty(node: ShorthandPropertyDefinition | CoverInitializedName | ShorthandBindingProperty): ShorthandBindingProperty {
         switch (node.kind) {
             case SyntaxKind.ShorthandBindingProperty: {
-                return this.finishRefine(ExprUpdate.shorthandBindingProperty(node, node.name, node.initializer && this.refineAssignmentExpressionOrHigher(node.initializer)));
+                return this.finishRefine(SyntaxUpdate.ShorthandBindingProperty(node, node.name, node.initializer && this.refineAssignmentExpressionOrHigher(node.initializer)));
             }
             case SyntaxKind.ShorthandPropertyDefinition: {
-                return this.finishRefine(this.finishNode(Expr.shorthandBindingProperty(node.name, undefined), getPos(node), getEnd(node)));
+                return this.finishRefine(this.finishNode(Syntax.ShorthandBindingProperty(this.refineBindingIdentifier(node.name), undefined), Syntax.pos(node), Syntax.end(node)));
             }
             case SyntaxKind.CoverInitializedName: {
-                return this.finishRefine(this.finishNode(Expr.shorthandBindingProperty(node.name, this.refineAssignmentExpressionOrHigher(node.initializer)), getPos(node), getEnd(node)));
+                return this.finishRefine(this.finishNode(Syntax.ShorthandBindingProperty(this.refineBindingIdentifier(node.name), this.refineAssignmentExpressionOrHigher(node.initializer)), Syntax.pos(node), Syntax.end(node)));
             }
         }
     }
@@ -1034,14 +1057,14 @@ export class Parser {
 
     private refineObjectBindingPattern(node: ObjectLiteral | ObjectBindingPattern): ObjectBindingPattern {
         if (node.kind === SyntaxKind.ObjectBindingPattern) {
-            return this.finishRefine(ExprUpdate.objectBindingPattern(node, visitList(node.properties, this.refineObjectBindingPatternElement), node.rest && this.refineBindingRestProperty(node.rest)));
+            return this.finishRefine(SyntaxUpdate.ObjectBindingPattern(node, visitList(node.properties, this.refineObjectBindingPatternElement), node.rest && this.refineBindingRestProperty(node.rest)));
         }
         const properties: ObjectBindingPatternElement[] = [];
         let rest: BindingRestProperty | undefined;
         for (const property of node.properties) {
             switch (property.kind) {
                 case SyntaxKind.SpreadElement:
-                    if (rest) return this.errorAtPos(`Unexpected token.`, getPos(property));
+                    if (rest) return this.errorAtPos(`Unexpected token.`, Syntax.pos(property));
                     rest = this.refineBindingRestProperty(property);
                     continue;
                 case SyntaxKind.PropertyDefinition:
@@ -1055,27 +1078,27 @@ export class Parser {
                     return assertNever(property);
             }
         }
-        return this.finishNode(Expr.objectBindingPattern(properties, rest), getPos(node), getEnd(node));
+        return this.finishNode(Syntax.ObjectBindingPattern(properties, rest), Syntax.pos(node), Syntax.end(node));
     }
 
     private refineBindingRestElement(node: SpreadElement | BindingRestElement): BindingRestElement {
         if (node.kind === SyntaxKind.BindingRestElement) {
-            return this.finishRefine(ExprUpdate.bindingRestElement(node, this.refineBindingName(node.name)));
+            return this.finishRefine(SyntaxUpdate.BindingRestElement(node, this.refineBindingName(node.name)));
         }
-        return this.finishRefine(this.finishNode(Expr.bindingRestElement(this.refineBindingName(node.expression)), getPos(node), getEnd(node)));
+        return this.finishRefine(this.finishNode(Syntax.BindingRestElement(this.refineBindingName(node.expression)), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineBindingElement(node: AssignmentExpressionOrHigher | BindingElement): BindingElement {
         if (node.kind === SyntaxKind.BindingElement) {
-            return this.finishRefine(ExprUpdate.bindingElement(node, this.refineBindingName(node.name), node.initializer && this.refineAssignmentExpressionOrHigher(node.initializer)));
+            return this.finishRefine(SyntaxUpdate.BindingElement(node, this.refineBindingName(node.name), node.initializer && this.refineAssignmentExpressionOrHigher(node.initializer)));
         }
-        if (isCompoundAssignment(node)) return this.errorAtPos(`Unexpected token.`, getPos(node.operatorToken));
+        if (isCompoundAssignment(node)) return this.errorAtPos(`Unexpected token.`, Syntax.end(node.left));
         if (isSimpleAssignment(node)) {
             const name = this.refineBindingName(node.left);
             const initializer = node.right;
-            return this.finishRefine(this.finishNode(Expr.bindingElement(name, initializer), getPos(node), getEnd(node)));
+            return this.finishRefine(this.finishNode(Syntax.BindingElement(name, initializer), Syntax.pos(node), Syntax.end(node)));
         }
-        return this.finishRefine(this.finishNode(Expr.bindingElement(this.refineBindingName(node)), getPos(node), getEnd(node)));
+        return this.finishRefine(this.finishNode(Syntax.BindingElement(this.refineBindingName(node)), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineArrayBindingPatternElement(node: ArrayBindingPatternElement): ArrayBindingPatternElement {
@@ -1086,13 +1109,13 @@ export class Parser {
 
     private refineArrayBindingPattern(node: ArrayLiteral | ArrayBindingPattern): ArrayBindingPattern {
         if (node.kind === SyntaxKind.ArrayBindingPattern) {
-            return this.finishRefine(ExprUpdate.arrayBindingPattern(node, visitList(node.elements, this.refineArrayBindingPatternElement), node.rest && this.refineBindingRestElement(node.rest)));
+            return this.finishRefine(SyntaxUpdate.ArrayBindingPattern(node, visitList(node.elements, this.refineArrayBindingPatternElement), node.rest && this.refineBindingRestElement(node.rest)));
         }
 
         const elements: ArrayBindingPatternElement[] = [];
         let rest: BindingRestElement | undefined;
         for (const element of node.elements) {
-            if (rest) return this.errorAtPos(`Unexpected token.`, getPos(element));
+            if (rest) return this.errorAtPos(`Unexpected token.`, Syntax.pos(element));
             switch (element.kind) {
                 case SyntaxKind.Elision:
                     elements.push(element);
@@ -1105,17 +1128,17 @@ export class Parser {
                     continue;
             }
         }
-        return this.finishRefine(this.finishNode(Expr.arrayBindingPattern(elements, rest), getPos(node), getEnd(node)));
+        return this.finishRefine(this.finishNode(Syntax.ArrayBindingPattern(elements, rest), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineBindingName(node: AssignmentExpressionOrHigher | BindingName): BindingName {
         switch (node.kind) {
-            case SyntaxKind.Identifier: return node;
+            case SyntaxKind.IdentifierReference: return this.refineBindingIdentifier(node);
             case SyntaxKind.ObjectLiteral: return this.refineObjectBindingPattern(node);
             case SyntaxKind.ArrayLiteral: return this.refineArrayBindingPattern(node);
             case SyntaxKind.ObjectBindingPattern: return this.refineObjectBindingPattern(node);
             case SyntaxKind.ArrayBindingPattern: return this.refineArrayBindingPattern(node);
-            default: return this.errorAtPos(`Unexpected token.`, getPos(node));
+            default: return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
         }
     }
 
@@ -1133,15 +1156,13 @@ export class Parser {
                     parameters.push(this.refineBindingElement(head.expression));
                 }
             }
-            if (head.dotDotDotToken && head.name) {
-                rest = this.finishNode(Expr.rest(head.name), getPos(head.dotDotDotToken!), getEnd(head.name!));
-            }
+            rest = head.rest;
         }
-        else if (head.kind === SyntaxKind.Identifier) {
-            parameters.push(this.finishNode(Expr.var(head), getPos(head), getEnd(head)));
+        else if (head.kind === SyntaxKind.IdentifierReference) {
+            parameters.push(this.finishNode(Syntax.Param(this.refineBindingIdentifier(head)), Syntax.pos(head), Syntax.end(head)));
         }
         else {
-            return this.errorAtPos(`Unexpected token.`, getPos(head));
+            return this.errorAtPos(`Unexpected token.`, Syntax.pos(head));
         }
         return { parameters, rest };
     }
@@ -1171,36 +1192,36 @@ function isStartOfClause(token: SyntaxKind) {
     }
 }
 
-function createCoverParenthesizedExpressionAndArrowParameterList(expression: Expression | undefined, commaToken: TokenNode<SyntaxKind.CommaToken> | undefined, dotDotDotToken: TokenNode<SyntaxKind.DotDotDotToken> | undefined, name: BindingName | undefined, closeParenToken: TokenNode<SyntaxKind.CloseParenToken>): CoverParenthesizedExpressionAndArrowParameterList {
-    return { kind: SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList, expression, commaToken, dotDotDotToken, name, closeParenToken, [Syntax.location]: createTextRange(0, 0) };
+function createCoverParenthesizedExpressionAndArrowParameterList(expression: Expression | undefined, rest: BindingRestElement | undefined): CoverParenthesizedExpressionAndArrowParameterList {
+    return { kind: SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList, expression, rest, [Syntax.location]: createTextRange(0, 0) };
 }
 
-function createCoverInitializedName(name: Identifier, initializer: AssignmentExpressionOrHigher): CoverInitializedName {
+function createCoverInitializedName(name: IdentifierReference, initializer: AssignmentExpressionOrHigher): CoverInitializedName {
     return { kind: SyntaxKind.CoverInitializedName, name, initializer, [Syntax.location]: createTextRange(0, 0) };
 }
 
 interface SimpleAssignmentExpression extends AssignmentExpression {
-    operatorToken: TokenNode<SyntaxKind.EqualsToken>;
+    operator: SyntaxKind.EqualsToken;
 }
 
 interface CompoundAssignmentExpression extends AssignmentExpression {
-    operatorToken: TokenNode<Exclude<AssignmentOperatorKind, SyntaxKind.EqualsToken>>;
+    operator: Exclude<AssignmentOperator, SyntaxKind.EqualsToken>;
 }
 
 function isSimpleAssignment(node: Node): node is SimpleAssignmentExpression {
     return node.kind === SyntaxKind.AssignmentExpression
-        && node.operatorToken.kind === SyntaxKind.EqualsToken;
+        && node.operator === SyntaxKind.EqualsToken;
 }
 
 function isCompoundAssignment(node: Node): node is CompoundAssignmentExpression {
     return node.kind === SyntaxKind.AssignmentExpression
-        && node.operatorToken.kind !== SyntaxKind.EqualsToken;
+        && node.operator !== SyntaxKind.EqualsToken;
 }
 
 function mayBeIdentifier(token: SyntaxKind, allowReservedWords: boolean, allowAwait: boolean) {
     if (token === SyntaxKind.Identifier) return true;
     if (token === SyntaxKind.AwaitKeyword) return allowAwait || allowReservedWords;
-    if (isECMAScriptReservedWordKind(token)) return allowReservedWords;
-    if (isKeywordKind(token)) return true;
+    if (isECMAScriptReservedWord(token)) return allowReservedWords;
+    if (isKeyword(token)) return true;
     return false;
 }

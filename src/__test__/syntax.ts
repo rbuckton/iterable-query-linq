@@ -31,14 +31,14 @@ describe("syntax", () => {
     it("parenthesized expression", () => {
         const node = new Parser().parse(`(a)`);
         expect(node.kind).to.equal(SyntaxKind.ParenthesizedExpression);
-        expect((node as ParenthesizedExpression).expression.kind).to.equal(SyntaxKind.Identifier);
+        expect((node as ParenthesizedExpression).expression.kind).to.equal(SyntaxKind.IdentifierReference);
     });
     it("parenthesized expression refined to arrow", () => {
         const node = new Parser().parse(`({ a = 1 }) => a`);
         expect(node.kind).to.equal(SyntaxKind.ArrowFunction);
         expect((node as ArrowFunction).parameterList.length).to.equal(1);
         expect((node as ArrowFunction).parameterList[0].name.kind).to.equal(SyntaxKind.ObjectBindingPattern);
-        expect((node as ArrowFunction).body.kind).to.equal(SyntaxKind.Identifier);
+        expect((node as ArrowFunction).body.kind).to.equal(SyntaxKind.IdentifierReference);
         expect(((node as ArrowFunction).body as Identifier).text).to.equal("a");
     });
 });

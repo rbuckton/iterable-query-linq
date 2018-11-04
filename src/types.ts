@@ -1,11 +1,17 @@
+import { BinaryPrecedence, getBinaryOperatorPrecedence, visitList, assertFail } from "./utils";
+
 export enum SyntaxKind {
     Unknown,
     EndOfFileToken,
+
+    Identifier,
 
     // Literals
     StringLiteral,
     NumberLiteral,
     RegularExpressionLiteral,
+    NullLiteral,
+    BooleanLiteral,
 
     // Keywords
     // ECMAScript reserved words
@@ -69,7 +75,7 @@ export enum SyntaxKind {
     DescendingKeyword,
     EqualsKeyword,
     GroupKeyword,
-    HierarchyKeyword,           // `hierarchy`
+    HierarchyKeyword,               // `hierarchy`
     IntoKeyword,
     JoinKeyword,
     OnKeyword,
@@ -79,16 +85,16 @@ export enum SyntaxKind {
     WhereKeyword,
 
     // Query hierarchy keywords
-    AncestorsofKeyword,            // `ancestor`
-    AncestorsorselfofKeyword,      // `ancestororself`
-    ChildrenofKeyword,               // `child`
-    DescendantsofKeyword,          // `descendant`
-    DescendantsorselfofKeyword,    // `descendantorself`
-    ParentofKeyword,              // `parent`
-    RootofKeyword,                // `root`
-    SelfofKeyword,                // `self`
-    SiblingsofKeyword,             // `sibling`
-    SiblingsorselfofKeyword,       // `siblingorself`
+    AncestorsofKeyword,             // `ancestorof`
+    AncestorsorselfofKeyword,       // `ancestororselfof`
+    ChildrenofKeyword,              // `childof`
+    DescendantsofKeyword,           // `descendantof`
+    DescendantsorselfofKeyword,     // `descendantorselfof`
+    ParentofKeyword,                // `parentof`
+    RootofKeyword,                  // `rootof`
+    SelfofKeyword,                  // `selfof`
+    SiblingsofKeyword,              // `siblingof`
+    SiblingsorselfofKeyword,        // `siblingorselfof`
 
     // Punctuation
     OpenBraceToken,
@@ -144,7 +150,9 @@ export enum SyntaxKind {
     ColonToken,
 
     // Names
-    Identifier,
+    IdentifierName,
+    IdentifierReference,
+    BindingIdentifier,
     ComputedPropertyName,
 
     // Query body clauses
@@ -159,6 +167,7 @@ export enum SyntaxKind {
     SequenceBinding,
 
     // Expressions
+    ThisExpression,
     ArrowFunction,
     PrefixUnaryExpression,
     PostfixUnaryExpression,
@@ -218,32 +227,7 @@ export function isTextLiteralKind(kind: SyntaxKind): kind is TextLiteralKind {
     }
 }
 
-export type KeywordLiteralKind =
-    | SyntaxKind.NullKeyword
-    | SyntaxKind.TrueKeyword
-    | SyntaxKind.FalseKeyword;
-
-export function isKeywordLiteralKind(kind: SyntaxKind): kind is KeywordLiteralKind {
-    switch (kind) {
-        case SyntaxKind.NullKeyword:
-        case SyntaxKind.TrueKeyword:
-        case SyntaxKind.FalseKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type LiteralKind =
-    | TextLiteralKind
-    | KeywordLiteralKind;
-
-export function isLiteralKind(kind: SyntaxKind): kind is LiteralKind {
-    return isTextLiteralKind(kind)
-        || isKeywordLiteralKind(kind);
-}
-
-export type ECMAScriptReservedWordKind =
+export type ECMAScriptReservedWord =
     | SyntaxKind.AwaitKeyword
     | SyntaxKind.BreakKeyword
     | SyntaxKind.CaseKeyword
@@ -291,7 +275,7 @@ export type ECMAScriptReservedWordKind =
     | SyntaxKind.WithKeyword
     | SyntaxKind.YieldKeyword;
 
-export function isECMAScriptReservedWordKind(kind: SyntaxKind): kind is ECMAScriptReservedWordKind {
+export function isECMAScriptReservedWord(kind: SyntaxKind): kind is ECMAScriptReservedWord {
     switch (kind) {
         case SyntaxKind.AwaitKeyword:
         case SyntaxKind.BreakKeyword:
@@ -345,12 +329,12 @@ export function isECMAScriptReservedWordKind(kind: SyntaxKind): kind is ECMAScri
     }
 }
 
-export type ECMAScriptContextualKeywordKind =
+export type ECMAScriptContextualKeyword =
     | SyntaxKind.AsyncKeyword
     | SyntaxKind.FromKeyword
     | SyntaxKind.OfKeyword;
 
-export function isECMAScriptContextualKeywordKind(kind: SyntaxKind): kind is ECMAScriptContextualKeywordKind {
+export function isECMAScriptContextualKeyword(kind: SyntaxKind): kind is ECMAScriptContextualKeyword {
     switch (kind) {
         case SyntaxKind.AsyncKeyword:
         case SyntaxKind.FromKeyword:
@@ -361,7 +345,7 @@ export function isECMAScriptContextualKeywordKind(kind: SyntaxKind): kind is ECM
     }
 }
 
-export type QueryKeywordKind =
+export type QueryKeyword =
     | SyntaxKind.AscendingKeyword
     | SyntaxKind.ByKeyword
     | SyntaxKind.DescendingKeyword
@@ -379,7 +363,7 @@ export type QueryKeywordKind =
     | SyntaxKind.WhereKeyword
     | SyntaxKind.HierarchyKeyword;
 
-export function isQueryKeywordKind(kind: SyntaxKind): kind is QueryKeywordKind {
+export function isQueryKeyword(kind: SyntaxKind): kind is QueryKeyword {
     switch (kind) {
         case SyntaxKind.AscendingKeyword:
         case SyntaxKind.ByKeyword:
@@ -403,50 +387,20 @@ export function isQueryKeywordKind(kind: SyntaxKind): kind is QueryKeywordKind {
     }
 }
 
-export type HierarchyAxisKeywordKind =
-    | SyntaxKind.RootofKeyword
-    | SyntaxKind.ParentofKeyword
-    | SyntaxKind.ChildrenofKeyword
-    | SyntaxKind.AncestorsofKeyword
-    | SyntaxKind.AncestorsorselfofKeyword
-    | SyntaxKind.DescendantsofKeyword
-    | SyntaxKind.DescendantsorselfofKeyword
-    | SyntaxKind.SelfofKeyword
-    | SyntaxKind.SiblingsofKeyword
-    | SyntaxKind.SiblingsorselfofKeyword;
-
-export function isHierarchyAxisKeywordKind(kind: SyntaxKind): kind is HierarchyAxisKeywordKind {
-    switch (kind) {
-        case SyntaxKind.RootofKeyword:
-        case SyntaxKind.ParentofKeyword:
-        case SyntaxKind.ChildrenofKeyword:
-        case SyntaxKind.AncestorsofKeyword:
-        case SyntaxKind.AncestorsorselfofKeyword:
-        case SyntaxKind.DescendantsofKeyword:
-        case SyntaxKind.DescendantsorselfofKeyword:
-        case SyntaxKind.SelfofKeyword:
-        case SyntaxKind.SiblingsofKeyword:
-        case SyntaxKind.SiblingsorselfofKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type KeywordKind =
-    | ECMAScriptReservedWordKind
-    | ECMAScriptContextualKeywordKind
-    | QueryKeywordKind
+export type Keyword =
+    | ECMAScriptReservedWord
+    | ECMAScriptContextualKeyword
+    | QueryKeyword
     | HierarchyAxisKeywordKind;
 
-export function isKeywordKind(kind: SyntaxKind): kind is KeywordKind {
-    return isECMAScriptReservedWordKind(kind)
-        || isECMAScriptContextualKeywordKind(kind)
-        || isQueryKeywordKind(kind)
+export function isKeyword(kind: SyntaxKind): kind is Keyword {
+    return isECMAScriptReservedWord(kind)
+        || isECMAScriptContextualKeyword(kind)
+        || isQueryKeyword(kind)
         || isHierarchyAxisKeywordKind(kind);
 }
 
-export type AssignmentOperatorKind =
+export type AssignmentOperator =
     | SyntaxKind.EqualsToken
     | SyntaxKind.PlusEqualsToken
     | SyntaxKind.MinusEqualsToken
@@ -461,7 +415,7 @@ export type AssignmentOperatorKind =
     | SyntaxKind.BarEqualsToken
     | SyntaxKind.CaretEqualsToken;
 
-export function isAssignmentOperatorKind(kind: SyntaxKind): kind is AssignmentOperatorKind {
+export function isAssignmentOperator(kind: SyntaxKind): kind is AssignmentOperator {
     switch (kind) {
         case SyntaxKind.EqualsToken:
         case SyntaxKind.PlusEqualsToken:
@@ -482,7 +436,7 @@ export function isAssignmentOperatorKind(kind: SyntaxKind): kind is AssignmentOp
     }
 }
 
-export type BinaryOperatorKind =
+export type BinaryOperator =
     | SyntaxKind.AmpersandToken
     | SyntaxKind.AmpersandAmpersandToken
     | SyntaxKind.BarToken
@@ -508,7 +462,7 @@ export type BinaryOperatorKind =
     | SyntaxKind.InstanceofKeyword
     | SyntaxKind.InKeyword;
 
-export function isBinaryOperatorKind(kind: SyntaxKind): kind is BinaryOperatorKind {
+export function isBinaryOperator(kind: SyntaxKind): kind is BinaryOperator {
     switch (kind) {
         case SyntaxKind.LessThanToken:
         case SyntaxKind.LessThanEqualsToken:
@@ -540,7 +494,7 @@ export function isBinaryOperatorKind(kind: SyntaxKind): kind is BinaryOperatorKi
     }
 }
 
-export type PrefixUnaryOperatorKind =
+export type PrefixUnaryOperator =
     | SyntaxKind.PlusToken
     | SyntaxKind.PlusPlusToken
     | SyntaxKind.MinusToken
@@ -552,7 +506,7 @@ export type PrefixUnaryOperatorKind =
     | SyntaxKind.AwaitKeyword
     | SyntaxKind.DeleteKeyword;
 
-export function isPrefixUnaryOperatorKind(kind: SyntaxKind): kind is PrefixUnaryOperatorKind {
+export function isPrefixUnaryOperator(kind: SyntaxKind): kind is PrefixUnaryOperator {
     switch (kind) {
         case SyntaxKind.PlusToken:
         case SyntaxKind.PlusPlusToken:
@@ -570,11 +524,11 @@ export function isPrefixUnaryOperatorKind(kind: SyntaxKind): kind is PrefixUnary
     }
 }
 
-export type PostfixUnaryOperatorKind =
+export type PostfixUnaryOperator =
     | SyntaxKind.PlusPlusToken
     | SyntaxKind.MinusMinusToken;
 
-export function isPostfixUnaryOperatorKind(kind: SyntaxKind): kind is PostfixUnaryOperatorKind {
+export function isPostfixUnaryOperator(kind: SyntaxKind): kind is PostfixUnaryOperator {
     switch (kind) {
         case SyntaxKind.PlusPlusToken:
         case SyntaxKind.MinusMinusToken:
@@ -584,7 +538,7 @@ export function isPostfixUnaryOperatorKind(kind: SyntaxKind): kind is PostfixUna
     }
 }
 
-export type PunctuationKind =
+export type Punctuation =
     | SyntaxKind.OpenBraceToken
     | SyntaxKind.CloseBraceToken
     | SyntaxKind.OpenParenToken
@@ -593,16 +547,51 @@ export type PunctuationKind =
     | SyntaxKind.CloseBracketToken
     | SyntaxKind.DotToken
     | SyntaxKind.DotDotDotToken
-    | Exclude<BinaryOperatorKind, KeywordKind>
-    | Exclude<PrefixUnaryOperatorKind, KeywordKind>
-    | AssignmentOperatorKind
-    | PostfixUnaryOperatorKind
+    | SyntaxKind.CommaToken
+    | SyntaxKind.LessThanToken
+    | SyntaxKind.LessThanEqualsToken
+    | SyntaxKind.LessThanLessThanToken
+    | SyntaxKind.LessThanLessThanEqualsToken
+    | SyntaxKind.GreaterThanToken
+    | SyntaxKind.GreaterThanEqualsToken
+    | SyntaxKind.GreaterThanGreaterThanToken
+    | SyntaxKind.GreaterThanGreaterThanEqualsToken
+    | SyntaxKind.GreaterThanGreaterThanGreaterThanToken
+    | SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
+    | SyntaxKind.EqualsToken
+    | SyntaxKind.EqualsEqualsToken
+    | SyntaxKind.EqualsEqualsEqualsToken
     | SyntaxKind.EqualsGreaterThanToken
+    | SyntaxKind.ExclamationToken
+    | SyntaxKind.ExclamationEqualsToken
+    | SyntaxKind.ExclamationEqualsEqualsToken
+    | SyntaxKind.PlusToken
+    | SyntaxKind.PlusEqualsToken
+    | SyntaxKind.PlusPlusToken
+    | SyntaxKind.MinusToken
+    | SyntaxKind.MinusEqualsToken
+    | SyntaxKind.MinusMinusToken
+    | SyntaxKind.AsteriskToken
+    | SyntaxKind.AsteriskEqualsToken
+    | SyntaxKind.AsteriskAsteriskToken
+    | SyntaxKind.AsteriskAsteriskEqualsToken
+    | SyntaxKind.SlashToken
+    | SyntaxKind.SlashEqualsToken
+    | SyntaxKind.PercentToken
+    | SyntaxKind.PercentEqualsToken
+    | SyntaxKind.AmpersandToken
+    | SyntaxKind.AmpersandEqualsToken
+    | SyntaxKind.AmpersandAmpersandToken
+    | SyntaxKind.BarToken
+    | SyntaxKind.BarEqualsToken
+    | SyntaxKind.BarBarToken
+    | SyntaxKind.CaretToken
+    | SyntaxKind.CaretEqualsToken
+    | SyntaxKind.TildeToken
     | SyntaxKind.QuestionToken
-    | SyntaxKind.ColonToken
-    | SyntaxKind.CommaToken;
+    | SyntaxKind.ColonToken;
 
-export function isPunctuationKind(kind: SyntaxKind): kind is PunctuationKind {
+export function isPunctuation(kind: SyntaxKind): kind is Punctuation {
     switch (kind) {
         case SyntaxKind.OpenBraceToken:
         case SyntaxKind.CloseBraceToken:
@@ -622,33 +611,13 @@ export function isPunctuationKind(kind: SyntaxKind): kind is PunctuationKind {
         case SyntaxKind.DeleteKeyword:
             return false;
         default:
-            return isBinaryOperatorKind(kind)
-                || isPrefixUnaryOperatorKind(kind)
-                || isPostfixUnaryOperatorKind(kind);
+            return isBinaryOperator(kind)
+                || isPrefixUnaryOperator(kind)
+                || isPostfixUnaryOperator(kind);
     }
 }
 
-
-export type TokenKind =
-    | SyntaxKind.EndOfFileToken
-    | KeywordKind
-    | PunctuationKind;
-
-export function isTokenKind(kind: SyntaxKind): kind is TokenKind {
-    switch (kind) {
-        case SyntaxKind.EndOfFileToken:
-            return true;
-        case SyntaxKind.NullKeyword:
-        case SyntaxKind.TrueKeyword:
-        case SyntaxKind.FalseKeyword:
-        case SyntaxKind.ThisKeyword:
-            return false;
-        default:
-            return isBinaryOperatorKind(kind)
-                || isPrefixUnaryOperatorKind(kind)
-                || isPostfixUnaryOperatorKind(kind);
-    }
-}
+export type Token = Keyword | Punctuation;
 
 export const enum TokenFlags {
     None,
@@ -666,48 +635,448 @@ export interface Syntax {
     [Syntax.location]: TextRange;
 }
 
+const noTextRange: TextRange = { pos: 0, end: 0 };
+
+export function createTextRange(pos: number, end: number): TextRange {
+    return pos === 0 && end === 0 ? noTextRange : { pos, end };
+}
+
 export namespace Syntax {
     export const location = Symbol("Syntax.location");
+    export function This(): ThisExpression {
+        return { kind: SyntaxKind.ThisExpression, [Syntax.location]: noTextRange };
+    }
+    export function Null(): NullLiteral {
+        return { kind: SyntaxKind.NullLiteral, [Syntax.location]: noTextRange };
+    }
+    export function Boolean(value: boolean): BooleanLiteral {
+        return { kind: SyntaxKind.BooleanLiteral, value, [Syntax.location]: noTextRange };
+    }
+    export function Literal<Kind extends TextLiteralKind>(kind: Kind, text: string, flags: TokenFlags): TextLiteralNode<Kind> {
+        return { kind, text, flags, [Syntax.location]: noTextRange };
+    }
+    export function IdentifierName(text: string): IdentifierName;
+    export function IdentifierName(text: BindingIdentifier): IdentifierName;
+    export function IdentifierName(text: BindingIdentifier | string): IdentifierName {
+        return { kind: SyntaxKind.IdentifierName, text: typeof text === "string" ? text : text.text, [Syntax.location]: typeof text === "string" ? noTextRange : text[Syntax.location] };
+    }
+    export function IdentifierReference(text: string): IdentifierReference;
+    export function IdentifierReference(text: BindingIdentifier): IdentifierReference;
+    export function IdentifierReference(text: BindingIdentifier | string): IdentifierReference {
+        return { kind: SyntaxKind.IdentifierReference, text: typeof text === "string" ? text : text.text, [Syntax.location]: typeof text === "string" ? noTextRange : text[Syntax.location] };
+    }
+    export function BindingIdentifier(text: string): BindingIdentifier {
+        return { kind: SyntaxKind.BindingIdentifier, text, [Syntax.location]: noTextRange };
+    }
+    export function ComputedPropertyName(expression: Expression): ComputedPropertyName {
+        return { kind: SyntaxKind.ComputedPropertyName, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function Paren(expression: Expression): ParenthesizedExpression {
+        return { kind: SyntaxKind.ParenthesizedExpression, expression, [Syntax.location]: noTextRange };
+    }
+    export function PropertyDefinition(name: PropertyName | string, initializer: Expression): PropertyDefinition {
+        name = possiblyIdentifierName(name);
+        return { kind: SyntaxKind.PropertyDefinition, name, initializer: toAssignmentExpressionOrHigher(initializer), [Syntax.location]: noTextRange };
+    }
+    export function ShorthandPropertyDefinition(name: IdentifierReference | string): ShorthandPropertyDefinition {
+        name = possiblyIdentifierReference(name);
+        return { kind: SyntaxKind.ShorthandPropertyDefinition, name, [Syntax.location]: noTextRange };
+    }
+    export function ObjectLiteral(properties: ReadonlyArray<ObjectLiteralElement>): ObjectLiteral {
+        return { kind: SyntaxKind.ObjectLiteral, properties, [Syntax.location]: noTextRange };
+    }
+    export function AssignmentRestProperty(expression: Expression): AssignmentRestProperty {
+        return { kind: SyntaxKind.AssignmentRestProperty, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function AssignmentProperty(propertyName: PropertyName | string, assignmentElement: AssignmentElement): AssignmentProperty {
+        propertyName = possiblyIdentifierName(propertyName);
+        return { kind: SyntaxKind.AssignmentProperty, propertyName, assignmentElement, [Syntax.location]: noTextRange };
+    }
+    export function ShorthandAssignmentProperty(name: IdentifierReference | string, initializer: Expression | undefined): ShorthandAssignmentProperty {
+        name = possiblyIdentifierReference(name);
+        return { kind: SyntaxKind.ShorthandAssignmentProperty, name, initializer: initializer && toAssignmentExpressionOrHigher(initializer), [Syntax.location]: noTextRange };
+    }
+    export function ObjectAssignmentPattern(properties: ReadonlyArray<ObjectAssignmentPatternElement>, rest: AssignmentRestProperty | undefined): ObjectAssignmentPattern {
+        return { kind: SyntaxKind.ObjectAssignmentPattern, properties, rest, [Syntax.location]: noTextRange };
+    }
+    export function BindingRestProperty(name: BindingIdentifier | string): BindingRestProperty {
+        name = possiblyBindingIdentifier(name);
+        return { kind: SyntaxKind.BindingRestProperty, name, [Syntax.location]: noTextRange };
+    }
+    export function BindingProperty(propertyName: PropertyName | string, bindingElement: BindingElement): BindingProperty {
+        propertyName = possiblyIdentifierName(propertyName);
+        return { kind: SyntaxKind.BindingProperty, propertyName, bindingElement, [Syntax.location]: noTextRange };
+    }
+    export function ShorthandBindingProperty(name: BindingIdentifier | string, initializer: Expression | undefined): ShorthandBindingProperty {
+        name = possiblyBindingIdentifier(name);
+        initializer = initializer && toAssignmentExpressionOrHigher(initializer);
+        return { kind: SyntaxKind.ShorthandBindingProperty, name, initializer, [Syntax.location]: noTextRange };
+    }
+    export function ObjectBindingPattern(properties: ReadonlyArray<ObjectBindingPatternElement>, rest: BindingRestProperty | undefined): ObjectBindingPattern {
+        return { kind: SyntaxKind.ObjectBindingPattern, properties, rest, [Syntax.location]: noTextRange };
+    }
+    export function Elision(): Elision {
+        return { kind: SyntaxKind.Elision, [Syntax.location]: noTextRange };
+    }
+    export function SpreadElement(expression: Expression): SpreadElement {
+        return { kind: SyntaxKind.SpreadElement, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function ArrayLiteral(elements: ReadonlyArray<ArrayLiteralElement | Expression>): ArrayLiteral {
+        return { kind: SyntaxKind.ArrayLiteral, elements: visitList(elements, toArrayLiteralElement), [Syntax.location]: noTextRange };
+    }
+    export function AssignmentRestElement(target: DestructuringAssignmentTarget): AssignmentRestElement {
+        return { kind: SyntaxKind.AssignmentRestElement, target, [Syntax.location]: noTextRange };
+    }
+    export function AssignmentElement(target: DestructuringAssignmentTarget, initializer: Expression | undefined): AssignmentElement {
+        initializer = initializer && toAssignmentExpressionOrHigher(initializer);
+        return { kind: SyntaxKind.AssignmentElement, target, initializer, [Syntax.location]: noTextRange };
+    }
+    export function ArrayAssignmentPattern(elements: ReadonlyArray<ArrayAssignmentPatternElement>, rest: AssignmentRestElement | undefined): ArrayAssignmentPattern {
+        return { kind: SyntaxKind.ArrayAssignmentPattern, elements, rest, [Syntax.location]: noTextRange };
+    }
+    export function BindingElement(name: BindingName | string, initializer?: Expression): BindingElement {
+        name = possiblyBindingIdentifier(name);
+        initializer = initializer && toAssignmentExpressionOrHigher(initializer);
+        return { kind: SyntaxKind.BindingElement, name, initializer, [Syntax.location]: noTextRange };
+    }
+    export function BindingRestElement(name: BindingName | string): BindingRestElement {
+        name = possiblyBindingIdentifier(name);
+        return { kind: SyntaxKind.BindingRestElement, name, [Syntax.location]: noTextRange };
+    }
+    export function ArrayBindingPattern(elements: ReadonlyArray<ArrayBindingPatternElement>, rest: BindingRestElement | undefined): ArrayBindingPattern {
+        return { kind: SyntaxKind.ArrayBindingPattern, elements, rest, [Syntax.location]: noTextRange };
+    }
+    export function New(expression: Expression | string, argumentList: ReadonlyArray<Argument | Expression> | undefined): NewExpression {
+        expression = toMemberExpressionOrHigher(possiblyIdentifierReference(expression));
+        return { kind: SyntaxKind.NewExpression, expression, argumentList: argumentList && visitList(argumentList, toArgument), [Syntax.location]: noTextRange };
+    }
+    export function Call(expression: Expression | string, argumentList: ReadonlyArray<Argument | Expression>): CallExpression {
+        expression = toLeftHandSideExpressionOrHigher(possiblyIdentifierReference(expression));
+        return { kind: SyntaxKind.CallExpression, expression, argumentList: visitList(argumentList, toArgument), [Syntax.location]: noTextRange };
+    }
+    export function Property(expression: Expression, name: IdentifierName | string): PropertyAccessExpression {
+        return { kind: SyntaxKind.PropertyAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), name: possiblyIdentifierName(name), [Syntax.location]: noTextRange };
+    }
+    export function Index(expression: Expression, argumentExpression: Expression): ElementAccessExpression {
+        return { kind: SyntaxKind.ElementAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentExpression, [Syntax.location]: noTextRange };
+    }
+    export function PrefixUnary(operator: PrefixUnaryOperator, expression: Expression): PrefixUnaryExpression {
+        return { kind: SyntaxKind.PrefixUnaryExpression, operator, expression: toUnaryExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function PostfixUnary(expression: Expression, operator: PostfixUnaryOperator): PostfixUnaryExpression {
+        return { kind: SyntaxKind.PostfixUnaryExpression, expression: toLeftHandSideExpressionOrHigher(expression), operator, [Syntax.location]: noTextRange };
+    }
+    export function Binary(left: Expression, operator: BinaryOperator, right: Expression): BinaryExpression {
+        const precedence = getBinaryOperatorPrecedence(operator);
+        return { kind: SyntaxKind.BinaryExpression, left: toBinaryExpressionOrHigher(left, precedence), operator, right: toBinaryExpressionOrHigher(right, precedence + 1), [Syntax.location]: noTextRange };
+    }
+    export function Assign(left: LeftHandSideExpressionOrHigher, operator: AssignmentOperator, right: Expression): AssignmentExpression {
+        return { kind: SyntaxKind.AssignmentExpression, left, operator, right: toAssignmentExpressionOrHigher(right), [Syntax.location]: noTextRange };
+    }
+    export function Conditional(condition: Expression, whenTrue: Expression, whenFalse: Expression): ConditionalExpression {
+        return { kind: SyntaxKind.ConditionalExpression, condition: toBinaryExpressionOrHigher(condition, BinaryPrecedence.LogicalORExpression), whenTrue: toAssignmentExpressionOrHigher(whenTrue), whenFalse: toAssignmentExpressionOrHigher(whenFalse), [Syntax.location]: noTextRange };
+    }
+    export function Arrow(async: boolean, parameterList: ReadonlyArray<BindingElement | BindingIdentifier | string>, rest: BindingRestElement | undefined, body: Expression): ArrowFunction {
+        return { kind: SyntaxKind.ArrowFunction, async, parameterList: visitList(parameterList, toParameter), rest, body: toArrowBody(body), [Syntax.location]: noTextRange };
+    }
+    export function CommaList(expressions: ReadonlyArray<Expression>): CommaListExpression {
+        return { kind: SyntaxKind.CommaListExpression, expressions: visitList(expressions, toAssignmentExpressionOrHigher), [Syntax.location]: noTextRange };
+    }
+    export function Var(name: BindingName | string, initializer?: Expression): BindingElement {
+        return Syntax.BindingElement(name, initializer);
+    }
+    export function Param(name: BindingName | string, initializer?: Expression): BindingElement {
+        return Syntax.BindingElement(name, initializer);
+    }
+    export function Rest(name: BindingName | string): BindingRestElement {
+        return Syntax.BindingRestElement(name);
+    }
+    export function SequenceBinding(await: boolean, name: BindingIdentifier | string, hierarchyAxisKeyword: HierarchyAxisKeywordKind | undefined, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
+        name = possiblyBindingIdentifier(name);
+        return { kind: SyntaxKind.SequenceBinding, await, name, hierarchyAxisKeyword, expression: toAssignmentExpressionOrHigher(expression), withHierarchy: withHierarchy && toAssignmentExpressionOrHigher(withHierarchy), [Syntax.location]: noTextRange };
+    }
+    export function FromClause(outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
+        return { kind: SyntaxKind.FromClause, outerClause, sequenceBinding, [Syntax.location]: noTextRange };
+    }
+    export function LetClause(outerClause: QueryBodyClause, name: BindingIdentifier, expression: Expression): LetClause {
+        return { kind: SyntaxKind.LetClause, outerClause, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function WhereClause(outerClause: QueryBodyClause, expression: Expression): WhereClause {
+        return { kind: SyntaxKind.WhereClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    }
+    export function OrderbyClause(outerClause: QueryBodyClause, comparators: ReadonlyArray<OrderbyComparator>): OrderbyClause {
+        return { kind: SyntaxKind.OrderbyClause, outerClause, comparators, [Syntax.location]: noTextRange };
+    }
+    export function OrderbyComparator(expression: Expression, direction: DirectionKeywordKind | undefined, usingExpression: Expression | undefined): OrderbyComparator {
+        return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), direction, usingExpression: usingExpression && toAssignmentExpressionOrHigher(usingExpression), [Syntax.location]: noTextRange };
+    }
+    export function GroupClause(outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): GroupClause {
+        return { kind: SyntaxKind.GroupClause, outerClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
+    }
+    export function JoinClause(outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): JoinClause {
+        return { kind: SyntaxKind.JoinClause, outerClause, sequenceBinding, outerKeySelector: toAssignmentExpressionOrHigher(outerKeySelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
+    }
+    export function SelectClause(outerClause: QueryBodyClause, expression: Expression, into: BindingIdentifier | undefined): SelectClause {
+        return { kind: SyntaxKind.SelectClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), into, [Syntax.location]: noTextRange };
+    }
+    export function Query(query: SelectOrGroupClause): QueryExpression {
+        if (query.kind !== SyntaxKind.SelectClause &&
+            query.kind !== SyntaxKind.GroupClause ||
+            query.into) return assertFail("A query must end with either a 'select' or 'group' clause.");
+        return { kind: SyntaxKind.QueryExpression, query, [Syntax.location]: noTextRange };
+    }
+
+    function leftMost(node: Expression | AssignmentPattern): Expression | AssignmentPattern {
+        switch (node.kind) {
+            case SyntaxKind.PropertyAccessExpression:
+            case SyntaxKind.ElementAccessExpression:
+            case SyntaxKind.CallExpression:
+                return leftMost(node.expression);
+            case SyntaxKind.BinaryExpression:
+                return leftMost(node.left);
+            case SyntaxKind.PostfixUnaryExpression:
+                return leftMost(node.expression);
+            case SyntaxKind.ConditionalExpression:
+                return leftMost(node.condition);
+            default:
+                return node;
+        }
+    }
+
+    function toParameter(parameter: BindingElement | BindingIdentifier | string) {
+        if (typeof parameter === "string") parameter = Syntax.BindingIdentifier(parameter);
+        if (parameter.kind === SyntaxKind.BindingIdentifier) parameter = Syntax.Param(parameter);
+        return parameter;
+    }
+
+    function toArrowBody(body: Expression) {
+        return leftMost(body).kind === SyntaxKind.ObjectLiteral ? Syntax.Paren(body) :
+            toAssignmentExpressionOrHigher(body);
+    }
+
+    function possiblyIdentifierName<T extends Node>(name: T | string): T | IdentifierName {
+        return typeof name === "string" ? Syntax.IdentifierName(name) : name;
+    }
+
+    function possiblyIdentifierReference<T extends Node>(name: T | string): T | IdentifierReference {
+        return typeof name === "string" ? Syntax.IdentifierReference(name) : name;
+    }
+
+    function possiblyBindingIdentifier<T extends Node>(name: T | string): T | BindingIdentifier {
+        return typeof name === "string" ? Syntax.BindingIdentifier(name) : name;
+    }
+
+    function toBinaryExpressionOrHigher(node: Expression, precedence: BinaryPrecedence): BinaryExpressionOrHigher {
+        switch (node.kind) {
+            case SyntaxKind.BinaryExpression:
+                return getBinaryOperatorPrecedence(node.kind) >= precedence ? node : Syntax.Paren(node);
+            default:
+                return toUnaryExpressionOrHigher(node);
+        }
+    }
+
+    function toUnaryExpressionOrHigher(node: Expression) {
+        return isUnaryExpressionOrHigher(node) ? node : Syntax.Paren(node);
+    }
+
+    function toMemberExpressionOrHigher(node: Expression) {
+        return isMemberExpressionOrHigher(node) ? node : Syntax.Paren(node);
+    }
+
+    function toLeftHandSideExpressionOrHigher(node: Expression) {
+        return isLeftHandSideExpressionOrHigher(node) ? node : Syntax.Paren(node);
+    }
+
+    function toAssignmentExpressionOrHigher(node: Expression) {
+        return isAssignmentExpressionOrHigher(node) ? node : Syntax.Paren(node);
+    }
+
+    function toArrayLiteralElement(node: Expression | Elision | SpreadElement): ArrayLiteralElement {
+        switch (node.kind) {
+            case SyntaxKind.Elision: return node;
+            case SyntaxKind.SpreadElement: return node;
+            default: return toAssignmentExpressionOrHigher(node);
+        }
+    }
+
+    function toArgument(node: Expression | SpreadElement): Argument {
+        switch (node.kind) {
+            case SyntaxKind.SpreadElement: return node;
+            default: return toAssignmentExpressionOrHigher(node);
+        }
+    }
+
+    export function pos(node: Syntax) {
+        return node[Syntax.location].pos;
+    }
+
+    export function end(node: Syntax) {
+        return node[Syntax.location].end;
+    }
 }
 
-export function getPos(node: Node) {
-    return node[Syntax.location].pos;
+export namespace SyntaxUpdate {
+    export function ComputedPropertyName(node: ComputedPropertyName, expression: Expression): ComputedPropertyName {
+        return node.expression !== expression ? assignLocation(Syntax.ComputedPropertyName(expression), node) : node;
+    }
+    export function Paren(node: ParenthesizedExpression, expression: Expression): ParenthesizedExpression {
+        return node.expression !== expression ? assignLocation(Syntax.Paren(expression), node) : node;
+    }
+    export function PropertyDefinition(node: PropertyDefinition, name: PropertyName | string, initializer: Expression): PropertyDefinition {
+        return node.name !== name || node.initializer !== initializer ? assignLocation(Syntax.PropertyDefinition(name, initializer), node) : node;
+    }
+    export function ShorthandPropertyDefinition(node: ShorthandPropertyDefinition, name: IdentifierReference | string): ShorthandPropertyDefinition {
+        return node.name !== name ? assignLocation(Syntax.ShorthandPropertyDefinition(name), node) : node;
+    }
+    export function ObjectLiteral(node: ObjectLiteral, properties: ReadonlyArray<ObjectLiteralElement>): ObjectLiteral {
+        return node.properties !== properties ? assignLocation(Syntax.ObjectLiteral(properties), node) : node;
+    }
+    export function AssignmentRestProperty(node: AssignmentRestProperty, expression: Expression): AssignmentRestProperty {
+        return node.expression !== expression ? assignLocation(Syntax.AssignmentRestProperty(expression), node) : node;
+    }
+    export function AssignmentProperty(node: AssignmentProperty, propertyName: PropertyName | string, assignmentElement: AssignmentElement): AssignmentProperty {
+        return node.propertyName !== propertyName || node.assignmentElement !== assignmentElement ? assignLocation(Syntax.AssignmentProperty(propertyName, assignmentElement), node) : node;
+    }
+    export function ShorthandAssignmentProperty(node: ShorthandAssignmentProperty, name: IdentifierReference | string, initializer: Expression | undefined): ShorthandAssignmentProperty {
+        return node.name !== name || node.initializer !== initializer ? assignLocation(Syntax.ShorthandAssignmentProperty(name, initializer), node) : node;
+    }
+    export function ObjectAssignmentPattern(node: ObjectAssignmentPattern, properties: ReadonlyArray<ObjectAssignmentPatternElement>, rest: AssignmentRestProperty | undefined): ObjectAssignmentPattern {
+        return node.properties !== properties || node.rest !== rest ? assignLocation(Syntax.ObjectAssignmentPattern(properties, rest), node) : node;
+    }
+    export function BindingRestProperty(node: BindingRestProperty, name: BindingIdentifier | string): BindingRestProperty {
+        return node.name !== name ? assignLocation(Syntax.BindingRestProperty(name), node) : node;
+    }
+    export function BindingProperty(node: BindingProperty, propertyName: PropertyName | string, bindingElement: BindingElement): BindingProperty {
+        return node.propertyName !== propertyName || node.bindingElement !== bindingElement ? assignLocation(Syntax.BindingProperty(propertyName, bindingElement), node) : node;
+    }
+    export function ShorthandBindingProperty(node: ShorthandBindingProperty, name: BindingIdentifier | string, initializer: Expression | undefined): ShorthandBindingProperty {
+        return node.name !== name || node.initializer !== initializer ? assignLocation(Syntax.ShorthandBindingProperty(name, initializer), node) : node;
+    }
+    export function ObjectBindingPattern(node: ObjectBindingPattern, properties: ReadonlyArray<ObjectBindingPatternElement>, rest: BindingRestProperty | undefined): ObjectBindingPattern {
+        return node.properties !== properties || node.rest !== rest ? assignLocation(Syntax.ObjectBindingPattern(properties, rest), node) : node;
+    }
+    export function SpreadElement(node: SpreadElement, expression: Expression): SpreadElement {
+        return node.expression !== expression ? assignLocation(Syntax.SpreadElement(expression), node) : node;
+    }
+    export function ArrayLiteral(node: ArrayLiteral, elements: ReadonlyArray<ArrayLiteralElement | Expression>): ArrayLiteral {
+        return node.elements !== elements ? assignLocation(Syntax.ArrayLiteral(elements), node) : node;
+    }
+    export function AssignmentRestElement(node: AssignmentRestElement, target: DestructuringAssignmentTarget): AssignmentRestElement {
+        return node.target !== target ? assignLocation(Syntax.AssignmentRestElement(target), node) : node;
+    }
+    export function AssignmentElement(node: AssignmentElement, target: DestructuringAssignmentTarget, initializer: Expression | undefined): AssignmentElement {
+        return node.target !== target || node.initializer !== initializer ? assignLocation(Syntax.AssignmentElement(target, initializer), node) : node;
+    }
+    export function ArrayAssignmentPattern(node: ArrayAssignmentPattern, elements: ReadonlyArray<ArrayAssignmentPatternElement>, rest: AssignmentRestElement | undefined): ArrayAssignmentPattern {
+        return node.elements !== elements || node.rest !== rest ? assignLocation(Syntax.ArrayAssignmentPattern(elements, rest), node) : node;
+    }
+    export function BindingElement(node: BindingElement, name: BindingName | string, initializer?: Expression): BindingElement {
+        return node.name !== name || node.initializer !== initializer ? assignLocation(Syntax.BindingElement(name, initializer), node) : node;
+    }
+    export function BindingRestElement(node: BindingRestElement, name: BindingName | string): BindingRestElement {
+        return node.name !== name ? assignLocation(Syntax.BindingRestElement(name), node) : node;
+    }
+    export function ArrayBindingPattern(node: ArrayBindingPattern, elements: ReadonlyArray<ArrayBindingPatternElement>, rest: BindingRestElement | undefined): ArrayBindingPattern {
+        return node.elements !== elements || node.rest !== rest ? assignLocation(Syntax.ArrayBindingPattern(elements, rest), node) : node;
+    }
+    export function New(node: NewExpression, expression: Expression | string, argumentList: ReadonlyArray<Argument | Expression> | undefined): NewExpression {
+        return node.expression !== expression || node.argumentList !== argumentList ? assignLocation(Syntax.New(expression, argumentList), node) : node;
+    }
+    export function Call(node: CallExpression, expression: Expression | string, argumentList: ReadonlyArray<Argument | Expression>): CallExpression {
+        return node.expression !== expression || node.argumentList !== argumentList ? assignLocation(Syntax.Call(expression, argumentList), node) : node;
+    }
+    export function Property(node: PropertyAccessExpression, expression: Expression): PropertyAccessExpression {
+        return node.expression !== expression ? assignLocation(Syntax.Property(expression, node.name), node) : node;
+    }
+    export function Index(node: ElementAccessExpression, expression: Expression, argumentExpression: Expression): ElementAccessExpression {
+        return node.expression !== expression || node.argumentExpression !== argumentExpression ? assignLocation(Syntax.Index(expression, argumentExpression), node) : node;
+    }
+    export function PrefixUnary(node: PrefixUnaryExpression, expression: Expression): PrefixUnaryExpression {
+        return node.expression !== expression ? assignLocation(Syntax.PrefixUnary(node.operator, expression), node) : node;
+    }
+    export function PostfixUnary(node: PostfixUnaryExpression, expression: Expression): PostfixUnaryExpression {
+        return node.expression !== expression ? assignLocation(Syntax.PostfixUnary(expression, node.operator), node) : node;
+    }
+    export function Binary(node: BinaryExpression, left: Expression, right: Expression): BinaryExpression {
+        return node.left !== left || node.right !== right ? assignLocation(Syntax.Binary(left, node.operator, right), node) : node;
+    }
+    export function Assign(node: AssignmentExpression, left: LeftHandSideExpressionOrHigher, right: Expression): AssignmentExpression {
+        return node.left !== left || node.right !== right ? assignLocation(Syntax.Assign(left, node.operator, right), node) : node;
+    }
+    export function Conditional(node: ConditionalExpression, condition: Expression, whenTrue: Expression, whenFalse: Expression): ConditionalExpression {
+        return node.condition !== condition || node.whenTrue !== whenTrue || node.whenFalse !== whenFalse ? assignLocation(Syntax.Conditional(condition, whenTrue, whenFalse), node) : node;
+    }
+    export function Arrow(node: ArrowFunction, parameterList: ReadonlyArray<Parameter | BindingIdentifier | string>, rest: BindingRestElement | undefined, body: Expression): ArrowFunction {
+        return node.parameterList !== parameterList || node.rest !== rest || node.body !== body ? assignLocation(Syntax.Arrow(node.async, parameterList, rest, body), node) : node;
+    }
+    export function Comma(node: CommaListExpression, expressions: ReadonlyArray<Expression>): CommaListExpression {
+        return node.expressions !== expressions ? assignLocation(Syntax.CommaList(expressions), node) : node;
+    }
+    export function SequenceBinding(node: SequenceBinding, name: BindingIdentifier | string, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
+        return node.name !== name || node.expression !== expression || node.withHierarchy !== withHierarchy ? assignLocation(Syntax.SequenceBinding(node.await, name, node.hierarchyAxisKeyword, expression, withHierarchy), node) : node;
+    }
+    export function FromClause(node: FromClause, outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
+        return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding ? assignLocation(Syntax.FromClause(outerClause, sequenceBinding), node) : node;
+    }
+    export function LetClause(node: LetClause, outerClause: QueryBodyClause, name: BindingIdentifier, expression: Expression): LetClause {
+        return node.outerClause !== outerClause || node.name !== name || node.expression !== expression ? assignLocation(Syntax.LetClause(outerClause, name, expression), node) : node;
+    }
+    export function WhereClause(node: WhereClause, outerClause: QueryBodyClause, expression: Expression): WhereClause {
+        return node.outerClause !== outerClause || node.expression !== expression ? assignLocation(Syntax.WhereClause(outerClause, expression), node) : node;
+    }
+    export function OrderbyClause(node: OrderbyClause, outerClause: QueryBodyClause, comparators: OrderbyClause["comparators"]): OrderbyClause {
+        return node.outerClause !== outerClause || node.comparators !== comparators ? assignLocation(Syntax.OrderbyClause(outerClause, comparators), node) : node;
+    }
+    export function OrderbyComparator(node: OrderbyComparator, expression: Expression, usingExpression: Expression | undefined): OrderbyComparator {
+        return node.expression !== expression || node.usingExpression !== usingExpression ? assignLocation(Syntax.OrderbyComparator(expression, node.direction, usingExpression), node) : node;
+    }
+    export function GroupClause(node: GroupClause, outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): GroupClause {
+        return node.outerClause !== outerClause || node.elementSelector !== elementSelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.GroupClause(outerClause, elementSelector, keySelector, into), node) : node;
+    }
+    export function JoinClause(node: JoinClause, outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): JoinClause {
+        return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding || node.outerKeySelector !== outerKeySelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.JoinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), node) : node;
+    }
+    export function SelectClause(node: SelectClause, outerClause: QueryBodyClause, expression: Expression, into: BindingIdentifier | undefined): SelectClause {
+        return node.outerClause !== outerClause || node.expression !== expression || node.into !== into ? assignLocation(Syntax.SelectClause(outerClause, expression, into), node) : node;
+    }
+    export function Query(node: QueryExpression, query: GroupClause | SelectClause): QueryExpression {
+        return node.query !== query ? assignLocation(Syntax.Query(query), node) : node;
+    }
+    export function assignLocation<T extends Node>(node: T, source: Syntax): T {
+        node[Syntax.location] = source[Syntax.location];
+        return node;
+    }
 }
 
-export function getEnd(node: Node) {
-    return node[Syntax.location].end;
-}
-
-export interface TokenNode<Kind extends TokenKind> extends Syntax {
-    readonly kind: Kind;
-}
-
-export type Token = TokenNode<TokenKind>;
-export function isToken(node: Node): node is Token {
-    return isTokenKind(node.kind);
-}
-
-export type Keyword = TokenNode<KeywordKind>;
-export function isKeyword(node: Node): node is Keyword {
-    return isKeywordKind(node.kind);
-}
-
-export type Punctuation = TokenNode<PunctuationKind>;
-export function isPunctuation(node: Node): node is Punctuation {
-    return isPunctuationKind(node.kind);
-}
-
-export type AsyncKeyword = TokenNode<SyntaxKind.AsyncKeyword>;
-export type AwaitKeyword = TokenNode<SyntaxKind.AwaitKeyword>;
-export type DotDotDotToken = TokenNode<SyntaxKind.DotDotDotToken>;
-
-export type IdentifierReference = Identifier;
-export type IdentifierName = Identifier;
-export type BindingIdentifier = Identifier;
-
-export interface Identifier extends Syntax {
-    readonly kind: SyntaxKind.Identifier;
+export interface IdentifierReference extends Syntax {
+    readonly kind: SyntaxKind.IdentifierReference;
     readonly text: string;
+}
+
+export interface IdentifierName extends Syntax {
+    readonly kind: SyntaxKind.IdentifierName;
+    readonly text: string;
+}
+
+export interface BindingIdentifier extends Syntax {
+    readonly kind: SyntaxKind.BindingIdentifier;
+    readonly text: string;
+}
+
+export type Identifier =
+    | BindingIdentifier
+    | IdentifierReference
+    | IdentifierName;
+
+export function isIdentifier(node: Node): node is Identifier {
+    switch (node.kind) {
+        case SyntaxKind.BindingIdentifier:
+        case SyntaxKind.IdentifierReference:
+        case SyntaxKind.IdentifierName:
+            return true;
+        default:
+            return false;
+    }
 }
 
 export interface ComputedPropertyName extends Syntax {
@@ -736,15 +1105,27 @@ export function isTextLiteral(node: Node): node is TextLiteral {
     return isTextLiteralKind(node.kind);
 }
 
-export type NullLiteral = TokenNode<SyntaxKind.NullKeyword>;
-export type BooleanLiteral = TokenNode<SyntaxKind.TrueKeyword | SyntaxKind.FalseKeyword>;
+export interface NullLiteral extends Syntax {
+    readonly kind: SyntaxKind.NullLiteral;
+}
+
+export interface BooleanLiteral extends Syntax {
+    readonly kind: SyntaxKind.BooleanLiteral;
+    readonly value: boolean;
+}
 
 export type KeywordLiteral =
     | NullLiteral
     | BooleanLiteral;
 
 export function isKeywordLiteral(node: Node): node is KeywordLiteral {
-    return isKeywordLiteralKind(node.kind);
+    switch (node.kind) {
+        case SyntaxKind.NullLiteral:
+        case SyntaxKind.BooleanLiteral:
+            return true;
+        default:
+            return false;
+    }
 }
 
 export type Literal =
@@ -752,18 +1133,19 @@ export type Literal =
     | KeywordLiteral;
 
 export function isLiteral(node: Node): node is Literal {
-    return isLiteralKind(node.kind);
+    return isTextLiteral(node)
+        || isKeywordLiteral(node);
 }
 
 export type PropertyName =
-    | BindingIdentifier
+    | IdentifierName
     | StringLiteral
     | NumberLiteral
     | ComputedPropertyName;
 
-export function isMemberName(node: Node): node is PropertyName {
+export function isPropertyName(node: Node): node is PropertyName {
     switch (node.kind) {
-        case SyntaxKind.Identifier:
+        case SyntaxKind.IdentifierName:
         case SyntaxKind.StringLiteral:
         case SyntaxKind.NumberLiteral:
         case SyntaxKind.ComputedPropertyName:
@@ -773,7 +1155,9 @@ export function isMemberName(node: Node): node is PropertyName {
     }
 }
 
-export type ThisExpression = TokenNode<SyntaxKind.ThisKeyword>;
+export interface ThisExpression extends Syntax {
+    readonly kind: SyntaxKind.ThisExpression;
+}
 
 export type BindingName =
     | BindingIdentifier
@@ -982,7 +1366,7 @@ export interface ParenthesizedExpression extends Syntax {
 
 export type PrimaryExpression =
     | ThisExpression
-    | Identifier
+    | IdentifierReference
     | Literal
     | ArrayLiteral
     | ObjectLiteral
@@ -993,8 +1377,8 @@ export type PrimaryExpression =
 
 export function isPrimaryExpression(node: Node): node is PrimaryExpression {
     switch (node.kind) {
-        case SyntaxKind.ThisKeyword:
-        case SyntaxKind.Identifier:
+        case SyntaxKind.ThisExpression:
+        case SyntaxKind.IdentifierReference:
         case SyntaxKind.ArrayLiteral:
         case SyntaxKind.ObjectLiteral:
         case SyntaxKind.ParenthesizedExpression:
@@ -1008,7 +1392,7 @@ export function isPrimaryExpression(node: Node): node is PrimaryExpression {
 export interface PropertyAccessExpression extends Syntax {
     readonly kind: SyntaxKind.PropertyAccessExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
-    readonly name: Identifier;
+    readonly name: IdentifierName;
 }
 
 export interface ElementAccessExpression extends Syntax {
@@ -1066,20 +1450,16 @@ export function isLeftHandSideExpressionOrHigher(node: Node): node is LeftHandSi
     }
 }
 
-export type PrefixUnaryOperator = TokenNode<PrefixUnaryOperatorKind>;
-
 export interface PrefixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PrefixUnaryExpression;
-    readonly operatorToken: PrefixUnaryOperator;
+    readonly operator: PrefixUnaryOperator;
     readonly expression: UnaryExpressionOrHigher;
 }
-
-export type PostfixUnaryOperator = TokenNode<PostfixUnaryOperatorKind>;
 
 export interface PostfixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PostfixUnaryExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
-    readonly operatorToken: PostfixUnaryOperator;
+    readonly operator: PostfixUnaryOperator;
 }
 
 export type UnaryExpressionOrHigher =
@@ -1097,12 +1477,10 @@ export function isUnaryExpressionOrHigher(node: Node): node is UnaryExpressionOr
     }
 }
 
-export type BinaryOperator = TokenNode<BinaryOperatorKind>;
-
 export interface BinaryExpression extends Syntax {
     readonly kind: SyntaxKind.BinaryExpression;
     readonly left: BinaryExpressionOrHigher;
-    readonly operatorToken: BinaryOperator;
+    readonly operator: BinaryOperator;
     readonly right: BinaryExpressionOrHigher;
 }
 
@@ -1124,22 +1502,46 @@ export interface ConditionalExpression extends Syntax {
 //     `descendantsorselfof`
 //     `siblingsof`
 //     `siblingsorselfof`
-export type HierarchyAxisKeyword = TokenNode<HierarchyAxisKeywordKind>;
+export type HierarchyAxisKeywordKind =
+    | SyntaxKind.RootofKeyword
+    | SyntaxKind.ParentofKeyword
+    | SyntaxKind.ChildrenofKeyword
+    | SyntaxKind.AncestorsofKeyword
+    | SyntaxKind.AncestorsorselfofKeyword
+    | SyntaxKind.DescendantsofKeyword
+    | SyntaxKind.DescendantsorselfofKeyword
+    | SyntaxKind.SelfofKeyword
+    | SyntaxKind.SiblingsofKeyword
+    | SyntaxKind.SiblingsorselfofKeyword;
 
-export function isHierarchyAxisKeyword(node: Node): node is HierarchyAxisKeyword {
-    return isHierarchyAxisKeywordKind(node.kind);
+export function isHierarchyAxisKeywordKind(kind: SyntaxKind): kind is HierarchyAxisKeywordKind {
+    switch (kind) {
+        case SyntaxKind.RootofKeyword:
+        case SyntaxKind.ParentofKeyword:
+        case SyntaxKind.ChildrenofKeyword:
+        case SyntaxKind.AncestorsofKeyword:
+        case SyntaxKind.AncestorsorselfofKeyword:
+        case SyntaxKind.DescendantsofKeyword:
+        case SyntaxKind.DescendantsorselfofKeyword:
+        case SyntaxKind.SelfofKeyword:
+        case SyntaxKind.SiblingsofKeyword:
+        case SyntaxKind.SiblingsorselfofKeyword:
+            return true;
+        default:
+            return false;
+    }
 }
 
 // SequenceBinding[Await] :
-//     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
+//     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await]
 //     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
-//     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
+//     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await]
 //     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
 export interface SequenceBinding extends Syntax {
     readonly kind: SyntaxKind.SequenceBinding;
-    readonly awaitKeyword: TokenNode<SyntaxKind.AwaitKeyword> | undefined;
+    readonly await: boolean;
     readonly name: BindingIdentifier;
-    readonly hierarchyAxisKeyword: HierarchyAxisKeyword | undefined;
+    readonly hierarchyAxisKeyword: HierarchyAxisKeywordKind | undefined;
     readonly expression: AssignmentExpressionOrHigher;
     readonly withHierarchy: AssignmentExpressionOrHigher | undefined;
 }
@@ -1157,7 +1559,7 @@ export interface FromClause extends Syntax {
 export interface LetClause extends Syntax {
     readonly kind: SyntaxKind.LetClause;
     readonly outerClause: QueryBodyClause;
-    readonly name: Identifier;
+    readonly name: BindingIdentifier;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
@@ -1177,6 +1579,10 @@ export interface OrderbyClause extends Syntax {
     readonly comparators: ReadonlyArray<OrderbyComparator>;
 }
 
+export type DirectionKeywordKind =
+    | SyntaxKind.AscendingKeyword
+    | SyntaxKind.DescendingKeyword;
+
 // OrderbyComparatorList[Await] :
 //     OrderbyComparator[?Await]
 //     OrderbyComparatorList[?Await] `,` OrderbyComparator[?Await]
@@ -1184,14 +1590,14 @@ export interface OrderbyClause extends Syntax {
 // DirectionKeyword :
 //     `ascending`
 //     `descending`
-// 
+//
 // OrderbyComparator[Await] :
 //     AssignmentExpression[+In, ?Await] DirectionKeyword?
 //     AssignmentExpression[+In, ?Await] DirectionKeyword? `using` AssignmentExpression[+In, ?Await]
 export interface OrderbyComparator extends Syntax {
     readonly kind: SyntaxKind.OrderbyComparator;
     readonly expression: AssignmentExpressionOrHigher;
-    readonly directionToken: TokenNode<SyntaxKind.AscendingKeyword | SyntaxKind.DescendingKeyword> | undefined;
+    readonly direction: DirectionKeywordKind | undefined;
     readonly usingExpression: AssignmentExpressionOrHigher | undefined;
 }
 
@@ -1229,7 +1635,7 @@ export interface SelectClause extends Syntax {
 // QueryBodyClauses[Await] :
 //     QueryBodyClause[?Await]
 //     QueryBodyClauses[?Await] QueryBodyClause[?Await]
-// 
+//
 // QueryBodyClause[Await] :
 //     FromClause[Await]
 //     LetClause[Await]
@@ -1248,7 +1654,7 @@ export type QueryBodyClause =
 // SelectOrGroupClause[Await] :
 //     SelectClause[?Await]
 //     GroupClause[?Await]
-export type SelectOrGroupClause = 
+export type SelectOrGroupClause =
     | GroupClause
     | SelectClause;
 
@@ -1284,7 +1690,7 @@ export type Parameter = BindingElement;
 
 export interface ArrowFunction extends Syntax {
     readonly kind: SyntaxKind.ArrowFunction;
-    readonly asyncKeyword: TokenNode<SyntaxKind.AsyncKeyword> | undefined;
+    readonly async: boolean;
     readonly parameterList: ReadonlyArray<BindingElement>;
     readonly rest: BindingRestElement | undefined;
     readonly body: AssignmentExpressionOrHigher;
@@ -1303,12 +1709,10 @@ export function isBinaryExpressionOrHigher(node: Node): node is BinaryExpression
     }
 }
 
-export type AssignmentOperator = TokenNode<AssignmentOperatorKind>;
-
 export interface AssignmentExpression extends Syntax {
     readonly kind: SyntaxKind.AssignmentExpression;
     readonly left: LeftHandSideExpressionOrHigher;
-    readonly operatorToken: AssignmentOperator;
+    readonly operator: AssignmentOperator;
     readonly right: AssignmentExpressionOrHigher;
 }
 
@@ -1354,10 +1758,7 @@ export function isExpression(node: Node): node is Expression {
 export interface CoverParenthesizedExpressionAndArrowParameterList extends Syntax {
     readonly kind: SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList;
     readonly expression: Expression | undefined;
-    readonly commaToken: TokenNode<SyntaxKind.CommaToken> | undefined;
-    readonly dotDotDotToken: TokenNode<SyntaxKind.DotDotDotToken> | undefined;
-    readonly name: BindingName | undefined;
-    readonly closeParenToken: TokenNode<SyntaxKind.CloseParenToken>;
+    readonly rest: BindingRestElement | undefined;
 }
 
 export type Node =
@@ -1369,10 +1770,12 @@ export type Node =
     // Keywords
     // Punctuation
     // Selectors
-    | Token
+    // | Token
 
     // Names
-    | Identifier
+    | IdentifierName
+    | IdentifierReference
+    | BindingIdentifier
     | ComputedPropertyName
 
     // Clauses
@@ -1387,6 +1790,9 @@ export type Node =
     | SequenceBinding
 
     // Expressions
+    | ThisExpression
+    | NullLiteral
+    | BooleanLiteral
     | ArrowFunction
     | PrefixUnaryExpression
     | PostfixUnaryExpression

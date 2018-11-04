@@ -1,4 +1,4 @@
-import { SyntaxKind, TokenFlags, TokenKind } from "./types";
+import { SyntaxKind, TokenFlags, Token } from "./types";
 import { RecoverableSyntaxError } from "./errors";
 
 const keywordPattern = String.raw`\b(?:a(?:ncestors(?:orself)?of|s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|hildrenof|lass|on(?:st|tinue))|d(?:e(?:bugger|fault|lete|scend(?:ants(?:orself)?of|ing))|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|hierarchy|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:a(?:rentof|ckage)|r(?:ivate|otected)|ublic)|r(?:eturn|ootof)|s(?:el(?:ect|fof)|iblings(?:orself)?of|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
@@ -26,7 +26,7 @@ const tokensRegExp = new RegExp(tokensPattern, "g");
 const regExpRegExp = /\/((?:[^\/]|\\\/)+(\/[a-zA-Z]*)?)?/g;
 const stringRegExp = /'(?:[^']|\\')+'|"(?:[^"]|\\")+"/;
 
-const stringToTokenMap: Record<string, TokenKind> = {
+const stringToTokenMap: Record<string, Token> = {
     "ancestorsof": SyntaxKind.AncestorsofKeyword,
     "ancestorsorselfof": SyntaxKind.AncestorsorselfofKeyword,
     "ascending": SyntaxKind.AscendingKeyword,
@@ -158,12 +158,12 @@ for (const token in stringToTokenMap) {
 }
 
 /** @internal */
-export function stringToToken(text: string): TokenKind | undefined {
+export function stringToToken(text: string): Token | undefined {
     return stringToTokenMap[text];
 }
 
 /** @internal */
-export function tokenToString(kind: TokenKind) {
+export function tokenToString(kind: Token) {
     return tokenToStringMap[kind];
 }
 
@@ -286,10 +286,28 @@ export class Scanner {
 }
 
 /** @internal */
-export function isIdentifierChar(ch: string) {
+export function isIdentifierStart(ch: string) {
+    return ch >= "a" && ch <= "z"
+        || ch >= "A" && ch <= "Z"
+        || ch === "_"
+        || ch === "$";
+}
+
+/** @internal */
+export function isIdentifierPart(ch: string) {
     return ch >= "a" && ch <= "z"
         || ch >= "A" && ch <= "Z"
         || ch >= "0" && ch <= "9"
         || ch === "_"
         || ch === "$";
+}
+
+/** @internal */
+export function isIdentifier(text: string) {
+    if (text.length === 0) return false;
+    if (!isIdentifierStart(text.charAt(0))) return false;
+    for (let i = 1; i < text.length; i++) {
+        if (!isIdentifierPart(text.charAt(i))) return false;
+    }
+    return true;
 }

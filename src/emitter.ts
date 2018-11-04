@@ -1,18 +1,20 @@
 import {
-    TokenKind, Identifier, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause,
+    Token, SyntaxKind, ComputedPropertyName, FromClause, LetClause, WhereClause,
     OrderbyClause, OrderbyComparator, GroupClause, JoinClause, QueryExpression,
     ParenthesizedExpression, Elision, SpreadElement, ArrayLiteral, PropertyDefinition,
     ShorthandPropertyDefinition, ObjectLiteral, NewExpression, CallExpression,
     PropertyAccessExpression, ElementAccessExpression, PrefixUnaryExpression,
-    PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause, Token,
-    TextLiteral, Node, KeywordKind, PunctuationKind, isKeywordKind, ArrowFunction,
-    CommaListExpression, isHierarchyAxisKeywordKind, BindingElement, BindingRestElement,
+    PostfixUnaryExpression, BinaryExpression, ConditionalExpression, SelectClause,
+    TextLiteral, Node, Punctuation, isKeyword, ArrowFunction,
+    CommaListExpression, BindingElement, BindingRestElement,
     ObjectBindingPattern, ArrayBindingPattern, BindingProperty, AssignmentExpressionOrHigher,
     BindingRestProperty, ShorthandBindingProperty, ObjectAssignmentPattern, AssignmentProperty,
     ShorthandAssignmentProperty, ArrayAssignmentPattern, AssignmentElement, AssignmentRestElement,
-    AssignmentExpression, AssignmentRestProperty, SequenceBinding,
+    AssignmentExpression, AssignmentRestProperty, SequenceBinding, ThisExpression, NullLiteral, 
+    BooleanLiteral, isPunctuation, Identifier,
 } from "./types";
-import { tokenToString, isIdentifierChar } from "./scanner";
+import { tokenToString, isIdentifierPart } from "./scanner";
+import { assertNever } from "./utils";
 
 const indents: string[] = ["", "  "];
 
@@ -76,7 +78,7 @@ export class Emitter {
         if (node) this.emitNode(node);
     }
 
-    private writeNodeList(nodes: ReadonlyArray<Node>, separator: PunctuationKind, multiLine = false) {
+    private writeNodeList(nodes: ReadonlyArray<Node>, separator: Punctuation, multiLine = false) {
         this.indent();
         let first = true;
         for (const node of nodes) {
@@ -84,7 +86,7 @@ export class Emitter {
                 first = false;
             }
             else {
-                this.writePunctuation(separator);
+                this.writeToken(separator);
                 if (multiLine) {
                     this.writeLine();
                 }
@@ -97,31 +99,32 @@ export class Emitter {
         this.dedent();
     }
 
-    private writeKeyword(kind: KeywordKind) {
-        const leadingSpace = this._text.length > 0 && isIdentifierChar(this._text.charAt(this._text.length - 1));
-        this.writeToken(kind, leadingSpace, true);
-    }
+    private writeToken(kind: Token) {
+        let leadingSpace = false;
+        let trailingSpace = false;
+        if (isKeyword(kind)) {
+            leadingSpace = 
+                this._text.length > 0 && 
+                isIdentifierPart(this._text.charAt(this._text.length - 1));
+        }
+        else if (isPunctuation(kind)) {
+            const requestSpace =
+                kind !== SyntaxKind.OpenBracketToken &&
+                kind !== SyntaxKind.CloseBracketToken &&
+                kind !== SyntaxKind.OpenParenToken &&
+                kind !== SyntaxKind.CloseParenToken &&
+                kind !== SyntaxKind.DotToken &&
+                kind !== SyntaxKind.DotDotDotToken &&
+                kind !== SyntaxKind.ExclamationToken &&
+                kind !== SyntaxKind.TildeToken &&
+                kind !== SyntaxKind.CommaToken;
+            leadingSpace = requestSpace &&
+                kind !== SyntaxKind.OpenBraceToken &&
+                kind !== SyntaxKind.ColonToken;
+            trailingSpace = requestSpace &&
+                kind !== SyntaxKind.CloseBraceToken;
+        }
 
-    private writePunctuation(kind: PunctuationKind) {
-        const requestSpace =
-            kind !== SyntaxKind.OpenBracketToken &&
-            kind !== SyntaxKind.CloseBracketToken &&
-            kind !== SyntaxKind.OpenParenToken &&
-            kind !== SyntaxKind.CloseParenToken &&
-            kind !== SyntaxKind.DotToken &&
-            kind !== SyntaxKind.DotDotDotToken &&
-            kind !== SyntaxKind.ExclamationToken &&
-            kind !== SyntaxKind.TildeToken &&
-            kind !== SyntaxKind.CommaToken;
-        const leadingSpace = requestSpace &&
-            kind !== SyntaxKind.OpenBraceToken &&
-            kind !== SyntaxKind.ColonToken;
-        const trailingSpace = requestSpace &&
-            kind !== SyntaxKind.CloseBraceToken;
-        this.writeToken(kind, leadingSpace, trailingSpace);
-    }
-
-    private writeToken(kind: TokenKind, leadingSpace: boolean, trailingSpace: boolean) {
         if (leadingSpace) this.writeSpace();
         this.write(tokenToString(kind));
         if (trailingSpace) this.writeSpace();
@@ -135,14 +138,10 @@ export class Emitter {
             case SyntaxKind.RegularExpressionLiteral:
                 return this.emitTextLiteral(node);
 
-            // Keywords
-            // Punctuation
-            // Selectors
-            default:
-                return this.emitToken(node);
-
             // Names
-            case SyntaxKind.Identifier: return this.emitIdentifier(node);
+            case SyntaxKind.BindingIdentifier:
+            case SyntaxKind.IdentifierReference:
+            case SyntaxKind.IdentifierName: return this.emitIdentifier(node);
             case SyntaxKind.ComputedPropertyName: return this.emitComputedPropertyName(node);
 
             // Query body clauses
@@ -157,6 +156,9 @@ export class Emitter {
             case SyntaxKind.SequenceBinding: return this.emitSequenceBinding(node);
 
             // Expressions
+            case SyntaxKind.ThisExpression: return this.emitThisExpression(node);
+            case SyntaxKind.NullLiteral: return this.emitNullLiteral(node);
+            case SyntaxKind.BooleanLiteral: return this.emitBooleanLiteral(node);
             case SyntaxKind.ArrowFunction: return this.emitArrowFunction(node);
             case SyntaxKind.PrefixUnaryExpression: return this.emitPrefixUnaryExpression(node);
             case SyntaxKind.PostfixUnaryExpression: return this.emitPostfixUnaryExpression(node);
@@ -199,6 +201,9 @@ export class Emitter {
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
             case SyntaxKind.CoverInitializedName:
                 throw new Error("Not supported");
+
+            default: 
+                return assertNever(node);
         }
     }
 
@@ -212,17 +217,14 @@ export class Emitter {
     // Punctuation
     // Selectors
 
-    private emitToken(node: Token): void {
-        if (isKeywordKind(node.kind)) {
-            this.writeKeyword(node.kind);
-        }
-        else if (isHierarchyAxisKeywordKind(node.kind)) {
-            this.writeToken(node.kind, true, false);
-        }
-        else if (node.kind !== SyntaxKind.EndOfFileToken) {
-            this.writePunctuation(node.kind);
-        }
-    }
+    // private emitToken(node: Token): void {
+    //     if (isKeywordKind(node.kind)) {
+    //         this.writeKeyword(node.kind);
+    //     }
+    //     else if (node.kind !== SyntaxKind.EndOfFileToken) {
+    //         this.writePunctuation(node.kind);
+    //     }
+    // }
 
     // Names
 
@@ -231,73 +233,73 @@ export class Emitter {
     }
 
     private emitComputedPropertyName(node: ComputedPropertyName): void {
-        this.writePunctuation(SyntaxKind.OpenBracketToken);
+        this.writeToken(SyntaxKind.OpenBracketToken);
         this.writeNode(node.expression);
-        this.writePunctuation(SyntaxKind.CloseBracketToken);
+        this.writeToken(SyntaxKind.CloseBracketToken);
     }
 
     // Query Clauses
 
     private emitSequenceBinding(node: SequenceBinding): void {
-        this.writeNode(node.awaitKeyword);
+        if (node.await) this.writeToken(SyntaxKind.AwaitKeyword);
         this.writeNode(node.name);
-        this.writeKeyword(SyntaxKind.InKeyword);
-        this.writeNode(node.hierarchyAxisKeyword);
+        this.writeToken(SyntaxKind.InKeyword);
+        if (node.hierarchyAxisKeyword) this.writeToken(node.hierarchyAxisKeyword);
         this.writeNode(node.expression);
         if (node.withHierarchy) {
-            this.writeKeyword(SyntaxKind.WithKeyword);
-            this.writeKeyword(SyntaxKind.HierarchyKeyword);
+            this.writeToken(SyntaxKind.WithKeyword);
+            this.writeToken(SyntaxKind.HierarchyKeyword);
             this.writeNode(node.withHierarchy);
         }
     }
 
     private emitFromClause(node: FromClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.FromKeyword);
+        this.writeToken(SyntaxKind.FromKeyword);
         this.writeNode(node.sequenceBinding);
         this.writeLine();
     }
 
     private emitLetClause(node: LetClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.LetKeyword);
+        this.writeToken(SyntaxKind.LetKeyword);
         this.writeNode(node.name);
-        this.writePunctuation(SyntaxKind.EqualsToken);
+        this.writeToken(SyntaxKind.EqualsToken);
         this.writeNode(node.expression);
         this.writeLine();
     }
 
     private emitWhereClause(node: WhereClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.WhereKeyword);
+        this.writeToken(SyntaxKind.WhereKeyword);
         this.writeNode(node.expression);
         this.writeLine();
     }
 
     private emitOrderbyClause(node: OrderbyClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.OrderbyKeyword);
+        this.writeToken(SyntaxKind.OrderbyKeyword);
         this.writeNodeList(node.comparators, SyntaxKind.CommaToken, true);
         this.writeLine();
     }
 
     private emitOrderbyComparator(node: OrderbyComparator): void {
         this.writeNode(node.expression);
-        this.writeNode(node.directionToken);
+        if (node.direction !== undefined) this.writeToken(node.direction);
         if (node.usingExpression) {
-            this.writeKeyword(SyntaxKind.UsingKeyword);
+            this.writeToken(SyntaxKind.UsingKeyword);
             this.writeNode(node.usingExpression);
         }
     }
 
     private emitGroupClause(node: GroupClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.GroupKeyword);
+        this.writeToken(SyntaxKind.GroupKeyword);
         this.writeNode(node.elementSelector);
-        this.writeKeyword(SyntaxKind.ByKeyword);
+        this.writeToken(SyntaxKind.ByKeyword);
         this.writeNode(node.keySelector);
         if (node.into) {
-            this.writeKeyword(SyntaxKind.IntoKeyword);
+            this.writeToken(SyntaxKind.IntoKeyword);
             this.writeNode(node.into);
         }
         this.writeLine();
@@ -305,14 +307,14 @@ export class Emitter {
 
     private emitJoinClause(node: JoinClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.JoinKeyword);
+        this.writeToken(SyntaxKind.JoinKeyword);
         this.writeNode(node.sequenceBinding);
-        this.writeKeyword(SyntaxKind.OnKeyword);
+        this.writeToken(SyntaxKind.OnKeyword);
         this.writeNode(node.outerKeySelector);
-        this.writeKeyword(SyntaxKind.EqualsKeyword);
+        this.writeToken(SyntaxKind.EqualsKeyword);
         this.writeNode(node.keySelector);
         if (node.into) {
-            this.writeKeyword(SyntaxKind.IntoKeyword);
+            this.writeToken(SyntaxKind.IntoKeyword);
             this.writeNode(node.into);
         }
         this.writeLine();
@@ -320,10 +322,10 @@ export class Emitter {
 
     private emitSelectClause(node: SelectClause): void {
         this.writeNode(node.outerClause);
-        this.writeKeyword(SyntaxKind.SelectKeyword);
+        this.writeToken(SyntaxKind.SelectKeyword);
         this.writeNode(node.expression);
         if (node.into) {
-            this.writeKeyword(SyntaxKind.IntoKeyword);
+            this.writeToken(SyntaxKind.IntoKeyword);
             this.writeNode(node.into);
         }
         this.writeLine();
@@ -331,76 +333,88 @@ export class Emitter {
 
     // Expressions
 
+    private emitThisExpression(_node: ThisExpression): void {
+        this.writeToken(SyntaxKind.ThisKeyword);
+    }
+
+    private emitNullLiteral(_node: NullLiteral): void {
+        this.writeToken(SyntaxKind.NullKeyword);
+    }
+
+    private emitBooleanLiteral(node: BooleanLiteral): void {
+        this.writeToken(node.value ? SyntaxKind.TrueKeyword : SyntaxKind.FalseKeyword);
+    }
+
     private emitArrowFunction(node: ArrowFunction): void {
-        this.writeNode(node.asyncKeyword);
-        if (!node.asyncKeyword && node.parameterList.length === 1 && node.parameterList[0].name.kind === SyntaxKind.Identifier && !node.parameterList[0].initializer) {
+        if (node.async) this.writeToken(SyntaxKind.AsyncKeyword);
+        if (!node.async && node.parameterList.length === 1 && node.parameterList[0].name.kind === SyntaxKind.BindingIdentifier && !node.parameterList[0].initializer) {
             this.writeNode(node.parameterList[0]);
         }
         else {
-            this.writePunctuation(SyntaxKind.OpenParenToken);
+            this.writeToken(SyntaxKind.OpenParenToken);
             this.writeNodeList(node.parameterList, SyntaxKind.CommaToken);
-            this.writePunctuation(SyntaxKind.CloseParenToken);
+            this.writeToken(SyntaxKind.CloseParenToken);
         }
-        this.writePunctuation(SyntaxKind.EqualsGreaterThanToken);
+        this.writeToken(SyntaxKind.EqualsGreaterThanToken);
         this.writeNode(node.body);
     }
 
     private emitPrefixUnaryExpression(node: PrefixUnaryExpression): void {
-        this.writeNode(node.operatorToken);
+        this.writeToken(node.operator);
         this.writeNode(node.expression);
     }
 
     private emitPostfixUnaryExpression(node: PostfixUnaryExpression): void {
         this.writeNode(node.expression);
-        this.writeNode(node.operatorToken);
+        this.writeToken(node.operator);
     }
 
     private emitParenthesizedExpression(node: ParenthesizedExpression): void {
-        this.writePunctuation(SyntaxKind.OpenParenToken);
+        this.writeToken(SyntaxKind.OpenParenToken);
         this.writeNode(node.expression);
-        this.writePunctuation(SyntaxKind.CloseParenToken);
+        this.writeToken(SyntaxKind.CloseParenToken);
     }
 
     private emitCallExpression(node: CallExpression): void {
         this.writeNode(node.expression);
-        this.writePunctuation(SyntaxKind.OpenParenToken);
+        this.writeToken(SyntaxKind.OpenParenToken);
         this.writeNodeList(node.argumentList, SyntaxKind.CommaToken);
-        this.writePunctuation(SyntaxKind.CloseParenToken);
+        this.writeToken(SyntaxKind.CloseParenToken);
     }
 
     private emitNewExpression(node: NewExpression): void {
-        this.writeKeyword(SyntaxKind.NewKeyword);
+        this.writeToken(SyntaxKind.NewKeyword);
         this.writeNode(node.expression);
         if (node.argumentList) {
-            this.writePunctuation(SyntaxKind.OpenParenToken);
+            this.writeToken(SyntaxKind.OpenParenToken);
             this.writeNodeList(node.argumentList, SyntaxKind.CommaToken);
-            this.writePunctuation(SyntaxKind.CloseParenToken);
+            this.writeToken(SyntaxKind.CloseParenToken);
         }
     }
 
     private emitPropertyAccessExpression(node: PropertyAccessExpression): void {
         this.writeNode(node.expression);
-        this.writePunctuation(SyntaxKind.DotToken);
+        this.writeToken(SyntaxKind.DotToken);
         this.writeNode(node.name);
     }
 
     private emitElementAccessExpression(node: ElementAccessExpression): void {
         this.writeNode(node.expression);
-        this.writePunctuation(SyntaxKind.OpenBracketToken);
+        this.writeToken(SyntaxKind.OpenBracketToken);
         this.writeNode(node.argumentExpression);
-        this.writePunctuation(SyntaxKind.CloseBracketToken);
+        this.writeToken(SyntaxKind.CloseBracketToken);
     }
 
     private emitObjectLiteral(node: ObjectLiteral): void {
-        this.writePunctuation(SyntaxKind.OpenBraceToken);
+        this.writeToken(SyntaxKind.OpenBraceToken);
         this.writeNodeList(node.properties, SyntaxKind.CommaToken, node.properties.length > 4);
-        this.writePunctuation(SyntaxKind.CloseBraceToken);
+        this.writeToken(SyntaxKind.CloseBraceToken);
     }
 
     private emitArrayLiteral(node: ArrayLiteral): void {
-        this.writePunctuation(SyntaxKind.OpenBracketToken);
+        this.writeToken(SyntaxKind.OpenBracketToken);
         this.writeNodeList(node.elements, SyntaxKind.CommaToken);
-        this.writePunctuation(SyntaxKind.CloseBracketToken);
+        this.writeToken(SyntaxKind.CloseBracketToken);
     }
 
     private emitElision(_node: Elision): void {
@@ -408,22 +422,22 @@ export class Emitter {
     }
 
     private emitSpreadElement(node: SpreadElement): void {
-        this.writePunctuation(SyntaxKind.DotDotDotToken);
+        this.writeToken(SyntaxKind.DotDotDotToken);
         this.writeNode(node.expression);
     }
 
     private emitBinaryExpression(node: BinaryExpression): void {
         this.writeNode(node.left);
-        this.writeNode(node.operatorToken);
+        this.writeToken(node.operator);
         this.writeNode(node.right);
     }
 
     private emitConditionalExpression(node: ConditionalExpression): void {
         this.writeNode(node.condition);
-        this.writePunctuation(SyntaxKind.QuestionToken);
+        this.writeToken(SyntaxKind.QuestionToken);
         this.writeNode(node.whenTrue);
         this.writeSpace();
-        this.writePunctuation(SyntaxKind.ColonToken);
+        this.writeToken(SyntaxKind.ColonToken);
         this.writeNode(node.whenFalse);
     }
 
@@ -433,7 +447,7 @@ export class Emitter {
 
     private emitAssignmentExpression(node: AssignmentExpression): void {
         this.writeNode(node.left);
-        this.writeNode(node.operatorToken);
+        this.writeToken(node.operator);
         this.writeNode(node.right);
     }
 
@@ -449,13 +463,13 @@ export class Emitter {
     }
 
     private emitBindingRestElement(node: BindingRestElement): void {
-        this.writePunctuation(SyntaxKind.DotDotDotToken);
+        this.writeToken(SyntaxKind.DotDotDotToken);
         this.writeNode(node.name);
     }
 
     private emitPropertyDefinition(node: PropertyDefinition): void {
         this.writeNode(node.name);
-        this.writePunctuation(SyntaxKind.ColonToken);
+        this.writeToken(SyntaxKind.ColonToken);
         this.writeNode(node.initializer);
     }
 
@@ -466,19 +480,19 @@ export class Emitter {
     // Patterns
 
     private emitObjectBindingPattern(node: ObjectBindingPattern): void {
-        this.writePunctuation(SyntaxKind.OpenBraceToken);
+        this.writeToken(SyntaxKind.OpenBraceToken);
         this.emitCommaDelimitedListWithRest(node.properties, node.rest);
-        this.writePunctuation(SyntaxKind.CloseBraceToken);
+        this.writeToken(SyntaxKind.CloseBraceToken);
     }
 
     private emitBindingRestProperty(node: BindingRestProperty): void {
-        this.writePunctuation(SyntaxKind.DotDotDotToken);
+        this.writeToken(SyntaxKind.DotDotDotToken);
         this.writeNode(node.name);
     }
 
     private emitBindingProperty(node: BindingProperty): void {
         this.writeNode(node.propertyName);
-        this.writePunctuation(SyntaxKind.ColonToken);
+        this.writeToken(SyntaxKind.ColonToken);
         this.writeSpace();
         this.writeNode(node.bindingElement);
     }
@@ -489,20 +503,20 @@ export class Emitter {
     }
 
     private emitObjectAssignmentPattern(node: ObjectAssignmentPattern): void {
-        this.writePunctuation(SyntaxKind.OpenBraceToken);
+        this.writeToken(SyntaxKind.OpenBraceToken);
         this.emitCommaDelimitedListWithRest(node.properties, node.rest);
-        this.writePunctuation(SyntaxKind.CloseBraceToken);
+        this.writeToken(SyntaxKind.CloseBraceToken);
     }
 
     private emitAssignmentProperty(node: AssignmentProperty): void {
         this.writeNode(node.propertyName);
-        this.writePunctuation(SyntaxKind.ColonToken);
+        this.writeToken(SyntaxKind.ColonToken);
         this.writeSpace();
         this.writeNode(node.assignmentElement);
     }
 
     private emitAssignmentRestProperty(node: AssignmentRestProperty): void {
-        this.writePunctuation(SyntaxKind.DotDotDotToken);
+        this.writeToken(SyntaxKind.DotDotDotToken);
         this.writeNode(node.expression);
     }
 
@@ -512,15 +526,15 @@ export class Emitter {
     }
 
     private emitArrayBindingPattern(node: ArrayBindingPattern): void {
-        this.writePunctuation(SyntaxKind.OpenBracketToken);
+        this.writeToken(SyntaxKind.OpenBracketToken);
         this.emitCommaDelimitedListWithRest(node.elements, node.rest);
-        this.writePunctuation(SyntaxKind.CloseBracketToken);
+        this.writeToken(SyntaxKind.CloseBracketToken);
     }
 
     private emitArrayAssignmentPattern(node: ArrayAssignmentPattern): void {
-        this.writePunctuation(SyntaxKind.OpenBracketToken);
+        this.writeToken(SyntaxKind.OpenBracketToken);
         this.emitCommaDelimitedListWithRest(node.elements, node.rest);
-        this.writePunctuation(SyntaxKind.CloseBracketToken);
+        this.writeToken(SyntaxKind.CloseBracketToken);
     }
 
     private emitAssignmentElement(node: AssignmentElement): void {
@@ -529,19 +543,19 @@ export class Emitter {
     }
 
     private emitAssignmentRestElement(node: AssignmentRestElement): void {
-        this.writePunctuation(SyntaxKind.DotDotDotToken);
+        this.writeToken(SyntaxKind.DotDotDotToken);
         this.writeNode(node.target);
     }
 
     private emitCommaDelimitedListWithRest<T extends Node>(nodeList: ReadonlyArray<T>, rest: Node | undefined): void {
         this.writeNodeList(nodeList, SyntaxKind.CommaToken);
-        if (nodeList.length > 0 && rest) this.writePunctuation(SyntaxKind.CommaToken);
+        if (nodeList.length > 0 && rest) this.writeToken(SyntaxKind.CommaToken);
         this.writeNode(rest);
     }
 
     private emitInitializer(node: AssignmentExpressionOrHigher | undefined) {
         if (node) {
-            this.writePunctuation(SyntaxKind.EqualsToken);
+            this.writeToken(SyntaxKind.EqualsToken);
             this.writeNode(node);
         }
     }

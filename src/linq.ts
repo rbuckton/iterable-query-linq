@@ -5,12 +5,12 @@ import { Transformer } from "./transformer";
 import { Emitter } from "./emitter";
 import { Query, AsyncQuery, from, fromAsync } from "iterable-query";
 import { Expression } from "./types";
-import { isIdentifierChar } from "./scanner";
+import { isIdentifierPart } from "./scanner";
 
 export function linq<T = any>(array: TemplateStringsArray, ...args: any[]): Query<T> {
     let text = array[0];
     for (let i = 0; i < args.length; i++) {
-        if (isIdentifierChar(text.charAt(text.length - 1))) text += " ";
+        if (isIdentifierPart(text.charAt(text.length - 1))) text += " ";
         text += `$arguments[${i}]` + array[i + 1];
     }
     return parseAndExecuteQuery(text, { $arguments: args });
