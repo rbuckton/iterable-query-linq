@@ -1,10 +1,8 @@
 import { BinaryPrecedence, getBinaryOperatorPrecedence, visitList, assertFail } from "./utils";
+import { TokenFlags, Token } from "./tokens";
 
 export enum SyntaxKind {
     Unknown,
-    EndOfFileToken,
-
-    Identifier,
 
     // Literals
     StringLiteral,
@@ -13,146 +11,8 @@ export enum SyntaxKind {
     NullLiteral,
     BooleanLiteral,
 
-    // Keywords
-    // ECMAScript reserved words
-    BreakKeyword,
-    CaseKeyword,
-    CatchKeyword,
-    ClassKeyword,
-    ConstKeyword,
-    ContinueKeyword,
-    DebuggerKeyword,
-    DefaultKeyword,
-    DeleteKeyword,
-    DoKeyword,
-    ElseKeyword,
-    EnumKeyword,
-    ExportKeyword,
-    ExtendsKeyword,
-    FalseKeyword,
-    FinallyKeyword,
-    ForKeyword,
-    FunctionKeyword,
-    IfKeyword,
-    ImportKeyword,
-    InKeyword,
-    InstanceofKeyword,
-    NewKeyword,
-    NullKeyword,
-    ReturnKeyword,
-    SuperKeyword,
-    SwitchKeyword,
-    ThisKeyword,
-    ThrowKeyword,
-    TrueKeyword,
-    TryKeyword,
-    TypeofKeyword,
-    VarKeyword,
-    VoidKeyword,
-    WhileKeyword,
-    WithKeyword,
-
-    // ECMAScript strict mode reserved words
-    ImplementsKeyword,
-    InterfaceKeyword,
-    LetKeyword,
-    PackageKeyword,
-    PrivateKeyword,
-    ProtectedKeyword,
-    PublicKeyword,
-    StaticKeyword,
-    YieldKeyword,
-
-    // ECMAScript contextual keywords
-    AsyncKeyword,
-    AwaitKeyword,
-    FromKeyword,
-    OfKeyword,
-
-    // Query keywords
-    AscendingKeyword,
-    ByKeyword,
-    DescendingKeyword,
-    EqualsKeyword,
-    GroupKeyword,
-    HierarchyKeyword,               // `hierarchy`
-    IntoKeyword,
-    JoinKeyword,
-    OnKeyword,
-    OrderbyKeyword,
-    SelectKeyword,
-    UsingKeyword,
-    WhereKeyword,
-
-    // Query hierarchy keywords
-    AncestorsofKeyword,             // `ancestorof`
-    AncestorsorselfofKeyword,       // `ancestororselfof`
-    ChildrenofKeyword,              // `childof`
-    DescendantsofKeyword,           // `descendantof`
-    DescendantsorselfofKeyword,     // `descendantorselfof`
-    ParentofKeyword,                // `parentof`
-    RootofKeyword,                  // `rootof`
-    SelfofKeyword,                  // `selfof`
-    SiblingsofKeyword,              // `siblingof`
-    SiblingsorselfofKeyword,        // `siblingorselfof`
-
-    // Punctuation
-    OpenBraceToken,
-    CloseBraceToken,
-    OpenParenToken,
-    CloseParenToken,
-    OpenBracketToken,
-    CloseBracketToken,
-    DotToken,
-    DotDotDotToken,
-    CommaToken,
-    LessThanToken,
-    LessThanEqualsToken,
-    LessThanLessThanToken,
-    LessThanLessThanEqualsToken,
-    GreaterThanToken,
-    GreaterThanEqualsToken,
-    GreaterThanGreaterThanToken,
-    GreaterThanGreaterThanEqualsToken,
-    GreaterThanGreaterThanGreaterThanToken,
-    GreaterThanGreaterThanGreaterThanEqualsToken,
-    EqualsToken,
-    EqualsEqualsToken,
-    EqualsEqualsEqualsToken,
-    EqualsGreaterThanToken,
-    ExclamationToken,
-    ExclamationEqualsToken,
-    ExclamationEqualsEqualsToken,
-    PlusToken,
-    PlusEqualsToken,
-    PlusPlusToken,
-    MinusToken,
-    MinusEqualsToken,
-    MinusMinusToken,
-    AsteriskToken,
-    AsteriskEqualsToken,
-    AsteriskAsteriskToken,
-    AsteriskAsteriskEqualsToken,
-    SlashToken,
-    SlashEqualsToken,
-    PercentToken,
-    PercentEqualsToken,
-    AmpersandToken,
-    AmpersandEqualsToken,
-    AmpersandAmpersandToken,
-    BarToken,
-    BarEqualsToken,
-    BarBarToken,
-    CaretToken,
-    CaretEqualsToken,
-    TildeToken,
-    QuestionToken,
-    ColonToken,
-
     // Names
-    IdentifierName,
-    IdentifierReference,
-    BindingIdentifier,
+    Identifier,
     ComputedPropertyName,
 
     // Query body clauses
@@ -206,424 +66,15 @@ export enum SyntaxKind {
     AssignmentElement,
     AssignmentRestElement,
 
+    // Statements
+    Block,
+    LetStatement,
+    ExpressionStatement,
+    ReturnStatement,
+
     // Cover grammars
     CoverParenthesizedExpressionAndArrowParameterList,
     CoverInitializedName
-}
-
-export type TextLiteralKind =
-    | SyntaxKind.StringLiteral
-    | SyntaxKind.NumberLiteral
-    | SyntaxKind.RegularExpressionLiteral;
-
-export function isTextLiteralKind(kind: SyntaxKind): kind is TextLiteralKind {
-    switch (kind) {
-        case SyntaxKind.StringLiteral:
-        case SyntaxKind.NumberLiteral:
-        case SyntaxKind.RegularExpressionLiteral:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type ECMAScriptReservedWord =
-    | SyntaxKind.AwaitKeyword
-    | SyntaxKind.BreakKeyword
-    | SyntaxKind.CaseKeyword
-    | SyntaxKind.CatchKeyword
-    | SyntaxKind.ClassKeyword
-    | SyntaxKind.ConstKeyword
-    | SyntaxKind.ContinueKeyword
-    | SyntaxKind.DebuggerKeyword
-    | SyntaxKind.DefaultKeyword
-    | SyntaxKind.DeleteKeyword
-    | SyntaxKind.DoKeyword
-    | SyntaxKind.ElseKeyword
-    | SyntaxKind.EnumKeyword
-    | SyntaxKind.ExportKeyword
-    | SyntaxKind.ExtendsKeyword
-    | SyntaxKind.FalseKeyword
-    | SyntaxKind.FinallyKeyword
-    | SyntaxKind.ForKeyword
-    | SyntaxKind.FunctionKeyword
-    | SyntaxKind.IfKeyword
-    | SyntaxKind.ImplementsKeyword
-    | SyntaxKind.ImportKeyword
-    | SyntaxKind.InKeyword
-    | SyntaxKind.InterfaceKeyword
-    | SyntaxKind.InstanceofKeyword
-    | SyntaxKind.LetKeyword
-    | SyntaxKind.NewKeyword
-    | SyntaxKind.NullKeyword
-    | SyntaxKind.PackageKeyword
-    | SyntaxKind.PrivateKeyword
-    | SyntaxKind.ProtectedKeyword
-    | SyntaxKind.PublicKeyword
-    | SyntaxKind.ReturnKeyword
-    | SyntaxKind.StaticKeyword
-    | SyntaxKind.SuperKeyword
-    | SyntaxKind.SwitchKeyword
-    | SyntaxKind.ThisKeyword
-    | SyntaxKind.ThrowKeyword
-    | SyntaxKind.TrueKeyword
-    | SyntaxKind.TryKeyword
-    | SyntaxKind.TypeofKeyword
-    | SyntaxKind.VarKeyword
-    | SyntaxKind.VoidKeyword
-    | SyntaxKind.WhileKeyword
-    | SyntaxKind.WithKeyword
-    | SyntaxKind.YieldKeyword;
-
-export function isECMAScriptReservedWord(kind: SyntaxKind): kind is ECMAScriptReservedWord {
-    switch (kind) {
-        case SyntaxKind.AwaitKeyword:
-        case SyntaxKind.BreakKeyword:
-        case SyntaxKind.CaseKeyword:
-        case SyntaxKind.CatchKeyword:
-        case SyntaxKind.ClassKeyword:
-        case SyntaxKind.ConstKeyword:
-        case SyntaxKind.ContinueKeyword:
-        case SyntaxKind.DebuggerKeyword:
-        case SyntaxKind.DefaultKeyword:
-        case SyntaxKind.DeleteKeyword:
-        case SyntaxKind.DoKeyword:
-        case SyntaxKind.ElseKeyword:
-        case SyntaxKind.EnumKeyword:
-        case SyntaxKind.ExportKeyword:
-        case SyntaxKind.ExtendsKeyword:
-        case SyntaxKind.FalseKeyword:
-        case SyntaxKind.FinallyKeyword:
-        case SyntaxKind.ForKeyword:
-        case SyntaxKind.FunctionKeyword:
-        case SyntaxKind.IfKeyword:
-        case SyntaxKind.ImportKeyword:
-        case SyntaxKind.InKeyword:
-        case SyntaxKind.InstanceofKeyword:
-        case SyntaxKind.NewKeyword:
-        case SyntaxKind.NullKeyword:
-        case SyntaxKind.ReturnKeyword:
-        case SyntaxKind.SuperKeyword:
-        case SyntaxKind.SwitchKeyword:
-        case SyntaxKind.ThisKeyword:
-        case SyntaxKind.ThrowKeyword:
-        case SyntaxKind.TrueKeyword:
-        case SyntaxKind.TryKeyword:
-        case SyntaxKind.TypeofKeyword:
-        case SyntaxKind.VarKeyword:
-        case SyntaxKind.VoidKeyword:
-        case SyntaxKind.WhileKeyword:
-        case SyntaxKind.WithKeyword:
-        case SyntaxKind.ImplementsKeyword:
-        case SyntaxKind.InterfaceKeyword:
-        case SyntaxKind.LetKeyword:
-        case SyntaxKind.PackageKeyword:
-        case SyntaxKind.PrivateKeyword:
-        case SyntaxKind.ProtectedKeyword:
-        case SyntaxKind.PublicKeyword:
-        case SyntaxKind.StaticKeyword:
-        case SyntaxKind.YieldKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type ECMAScriptContextualKeyword =
-    | SyntaxKind.AsyncKeyword
-    | SyntaxKind.FromKeyword
-    | SyntaxKind.OfKeyword;
-
-export function isECMAScriptContextualKeyword(kind: SyntaxKind): kind is ECMAScriptContextualKeyword {
-    switch (kind) {
-        case SyntaxKind.AsyncKeyword:
-        case SyntaxKind.FromKeyword:
-        case SyntaxKind.OfKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type QueryKeyword =
-    | SyntaxKind.AscendingKeyword
-    | SyntaxKind.ByKeyword
-    | SyntaxKind.DescendingKeyword
-    | SyntaxKind.EqualsKeyword
-    | SyntaxKind.FromKeyword
-    | SyntaxKind.GroupKeyword
-    | SyntaxKind.InKeyword
-    | SyntaxKind.IntoKeyword
-    | SyntaxKind.JoinKeyword
-    | SyntaxKind.LetKeyword
-    | SyntaxKind.OnKeyword
-    | SyntaxKind.OrderbyKeyword
-    | SyntaxKind.SelectKeyword
-    | SyntaxKind.UsingKeyword
-    | SyntaxKind.WhereKeyword
-    | SyntaxKind.HierarchyKeyword;
-
-export function isQueryKeyword(kind: SyntaxKind): kind is QueryKeyword {
-    switch (kind) {
-        case SyntaxKind.AscendingKeyword:
-        case SyntaxKind.ByKeyword:
-        case SyntaxKind.DescendingKeyword:
-        case SyntaxKind.EqualsKeyword:
-        case SyntaxKind.FromKeyword:
-        case SyntaxKind.GroupKeyword:
-        case SyntaxKind.InKeyword:
-        case SyntaxKind.IntoKeyword:
-        case SyntaxKind.JoinKeyword:
-        case SyntaxKind.LetKeyword:
-        case SyntaxKind.OnKeyword:
-        case SyntaxKind.OrderbyKeyword:
-        case SyntaxKind.SelectKeyword:
-        case SyntaxKind.UsingKeyword:
-        case SyntaxKind.WhereKeyword:
-        case SyntaxKind.HierarchyKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type Keyword =
-    | ECMAScriptReservedWord
-    | ECMAScriptContextualKeyword
-    | QueryKeyword
-    | HierarchyAxisKeywordKind;
-
-export function isKeyword(kind: SyntaxKind): kind is Keyword {
-    return isECMAScriptReservedWord(kind)
-        || isECMAScriptContextualKeyword(kind)
-        || isQueryKeyword(kind)
-        || isHierarchyAxisKeywordKind(kind);
-}
-
-export type AssignmentOperator =
-    | SyntaxKind.EqualsToken
-    | SyntaxKind.PlusEqualsToken
-    | SyntaxKind.MinusEqualsToken
-    | SyntaxKind.AsteriskEqualsToken
-    | SyntaxKind.AsteriskAsteriskEqualsToken
-    | SyntaxKind.SlashEqualsToken
-    | SyntaxKind.PercentEqualsToken
-    | SyntaxKind.LessThanLessThanEqualsToken
-    | SyntaxKind.GreaterThanGreaterThanEqualsToken
-    | SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
-    | SyntaxKind.AmpersandEqualsToken
-    | SyntaxKind.BarEqualsToken
-    | SyntaxKind.CaretEqualsToken;
-
-export function isAssignmentOperator(kind: SyntaxKind): kind is AssignmentOperator {
-    switch (kind) {
-        case SyntaxKind.EqualsToken:
-        case SyntaxKind.PlusEqualsToken:
-        case SyntaxKind.MinusEqualsToken:
-        case SyntaxKind.AsteriskEqualsToken:
-        case SyntaxKind.AsteriskAsteriskEqualsToken:
-        case SyntaxKind.SlashEqualsToken:
-        case SyntaxKind.PercentEqualsToken:
-        case SyntaxKind.LessThanLessThanEqualsToken:
-        case SyntaxKind.GreaterThanGreaterThanEqualsToken:
-        case SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken:
-        case SyntaxKind.AmpersandEqualsToken:
-        case SyntaxKind.BarEqualsToken:
-        case SyntaxKind.CaretEqualsToken:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type BinaryOperator =
-    | SyntaxKind.AmpersandToken
-    | SyntaxKind.AmpersandAmpersandToken
-    | SyntaxKind.BarToken
-    | SyntaxKind.BarBarToken
-    | SyntaxKind.AsteriskToken
-    | SyntaxKind.AsteriskAsteriskToken
-    | SyntaxKind.EqualsEqualsToken
-    | SyntaxKind.EqualsEqualsEqualsToken
-    | SyntaxKind.ExclamationEqualsToken
-    | SyntaxKind.ExclamationEqualsEqualsToken
-    | SyntaxKind.GreaterThanToken
-    | SyntaxKind.GreaterThanGreaterThanToken
-    | SyntaxKind.GreaterThanGreaterThanGreaterThanToken
-    | SyntaxKind.GreaterThanEqualsToken
-    | SyntaxKind.LessThanToken
-    | SyntaxKind.LessThanLessThanToken
-    | SyntaxKind.LessThanEqualsToken
-    | SyntaxKind.MinusToken
-    | SyntaxKind.PlusToken
-    | SyntaxKind.CaretToken
-    | SyntaxKind.PercentToken
-    | SyntaxKind.SlashToken
-    | SyntaxKind.InstanceofKeyword
-    | SyntaxKind.InKeyword;
-
-export function isBinaryOperator(kind: SyntaxKind): kind is BinaryOperator {
-    switch (kind) {
-        case SyntaxKind.LessThanToken:
-        case SyntaxKind.LessThanEqualsToken:
-        case SyntaxKind.LessThanLessThanToken:
-        case SyntaxKind.GreaterThanToken:
-        case SyntaxKind.GreaterThanEqualsToken:
-        case SyntaxKind.GreaterThanGreaterThanToken:
-        case SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
-        case SyntaxKind.EqualsEqualsToken:
-        case SyntaxKind.EqualsEqualsEqualsToken:
-        case SyntaxKind.ExclamationEqualsToken:
-        case SyntaxKind.ExclamationEqualsEqualsToken:
-        case SyntaxKind.PlusToken:
-        case SyntaxKind.MinusToken:
-        case SyntaxKind.AsteriskToken:
-        case SyntaxKind.AsteriskAsteriskToken:
-        case SyntaxKind.SlashToken:
-        case SyntaxKind.PercentToken:
-        case SyntaxKind.AmpersandToken:
-        case SyntaxKind.AmpersandAmpersandToken:
-        case SyntaxKind.BarToken:
-        case SyntaxKind.BarBarToken:
-        case SyntaxKind.CaretToken:
-        case SyntaxKind.InstanceofKeyword:
-        case SyntaxKind.InKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type PrefixUnaryOperator =
-    | SyntaxKind.PlusToken
-    | SyntaxKind.PlusPlusToken
-    | SyntaxKind.MinusToken
-    | SyntaxKind.MinusMinusToken
-    | SyntaxKind.ExclamationToken
-    | SyntaxKind.TildeToken
-    | SyntaxKind.TypeofKeyword
-    | SyntaxKind.VoidKeyword
-    | SyntaxKind.AwaitKeyword
-    | SyntaxKind.DeleteKeyword;
-
-export function isPrefixUnaryOperator(kind: SyntaxKind): kind is PrefixUnaryOperator {
-    switch (kind) {
-        case SyntaxKind.PlusToken:
-        case SyntaxKind.PlusPlusToken:
-        case SyntaxKind.MinusToken:
-        case SyntaxKind.MinusMinusToken:
-        case SyntaxKind.ExclamationToken:
-        case SyntaxKind.TildeToken:
-        case SyntaxKind.TypeofKeyword:
-        case SyntaxKind.VoidKeyword:
-        case SyntaxKind.DeleteKeyword:
-        case SyntaxKind.AwaitKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type PostfixUnaryOperator =
-    | SyntaxKind.PlusPlusToken
-    | SyntaxKind.MinusMinusToken;
-
-export function isPostfixUnaryOperator(kind: SyntaxKind): kind is PostfixUnaryOperator {
-    switch (kind) {
-        case SyntaxKind.PlusPlusToken:
-        case SyntaxKind.MinusMinusToken:
-            return true;
-        default:
-            return false;
-    }
-}
-
-export type Punctuation =
-    | SyntaxKind.OpenBraceToken
-    | SyntaxKind.CloseBraceToken
-    | SyntaxKind.OpenParenToken
-    | SyntaxKind.CloseParenToken
-    | SyntaxKind.OpenBracketToken
-    | SyntaxKind.CloseBracketToken
-    | SyntaxKind.DotToken
-    | SyntaxKind.DotDotDotToken
-    | SyntaxKind.CommaToken
-    | SyntaxKind.LessThanToken
-    | SyntaxKind.LessThanEqualsToken
-    | SyntaxKind.LessThanLessThanToken
-    | SyntaxKind.LessThanLessThanEqualsToken
-    | SyntaxKind.GreaterThanToken
-    | SyntaxKind.GreaterThanEqualsToken
-    | SyntaxKind.GreaterThanGreaterThanToken
-    | SyntaxKind.GreaterThanGreaterThanEqualsToken
-    | SyntaxKind.GreaterThanGreaterThanGreaterThanToken
-    | SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken
-    | SyntaxKind.EqualsToken
-    | SyntaxKind.EqualsEqualsToken
-    | SyntaxKind.EqualsEqualsEqualsToken
-    | SyntaxKind.EqualsGreaterThanToken
-    | SyntaxKind.ExclamationToken
-    | SyntaxKind.ExclamationEqualsToken
-    | SyntaxKind.ExclamationEqualsEqualsToken
-    | SyntaxKind.PlusToken
-    | SyntaxKind.PlusEqualsToken
-    | SyntaxKind.PlusPlusToken
-    | SyntaxKind.MinusToken
-    | SyntaxKind.MinusEqualsToken
-    | SyntaxKind.MinusMinusToken
-    | SyntaxKind.AsteriskToken
-    | SyntaxKind.AsteriskEqualsToken
-    | SyntaxKind.AsteriskAsteriskToken
-    | SyntaxKind.AsteriskAsteriskEqualsToken
-    | SyntaxKind.SlashToken
-    | SyntaxKind.SlashEqualsToken
-    | SyntaxKind.PercentToken
-    | SyntaxKind.PercentEqualsToken
-    | SyntaxKind.AmpersandToken
-    | SyntaxKind.AmpersandEqualsToken
-    | SyntaxKind.AmpersandAmpersandToken
-    | SyntaxKind.BarToken
-    | SyntaxKind.BarEqualsToken
-    | SyntaxKind.BarBarToken
-    | SyntaxKind.CaretToken
-    | SyntaxKind.CaretEqualsToken
-    | SyntaxKind.TildeToken
-    | SyntaxKind.QuestionToken
-    | SyntaxKind.ColonToken;
-
-export function isPunctuation(kind: SyntaxKind): kind is Punctuation {
-    switch (kind) {
-        case SyntaxKind.OpenBraceToken:
-        case SyntaxKind.CloseBraceToken:
-        case SyntaxKind.OpenParenToken:
-        case SyntaxKind.CloseParenToken:
-        case SyntaxKind.OpenBracketToken:
-        case SyntaxKind.CloseBracketToken:
-        case SyntaxKind.DotToken:
-        case SyntaxKind.DotDotDotToken:
-        case SyntaxKind.QuestionToken:
-        case SyntaxKind.ColonToken:
-        case SyntaxKind.EqualsGreaterThanToken:
-            return true;
-        case SyntaxKind.InstanceofKeyword:
-        case SyntaxKind.TypeofKeyword:
-        case SyntaxKind.VoidKeyword:
-        case SyntaxKind.DeleteKeyword:
-            return false;
-        default:
-            return isBinaryOperator(kind)
-                || isPrefixUnaryOperator(kind)
-                || isPostfixUnaryOperator(kind);
-    }
-}
-
-export type Token = Keyword | Punctuation;
-
-export const enum TokenFlags {
-    None,
-    Hexadecimal = 1 << 0,
-    Octal = 1 << 1,
-    Binary = 1 << 2
 }
 
 export interface TextRange {
@@ -652,21 +103,17 @@ export namespace Syntax {
     export function Boolean(value: boolean): BooleanLiteral {
         return { kind: SyntaxKind.BooleanLiteral, value, [Syntax.location]: noTextRange };
     }
-    export function Literal<Kind extends TextLiteralKind>(kind: Kind, text: string, flags: TokenFlags): TextLiteralNode<Kind> {
-        return { kind, text, flags, [Syntax.location]: noTextRange };
+    export function String(text: string): StringLiteral {
+        return { kind: SyntaxKind.StringLiteral, text, flags: TokenFlags.None, [Syntax.location]: noTextRange }
     }
-    export function IdentifierName(text: string): IdentifierName;
-    export function IdentifierName(text: BindingIdentifier): IdentifierName;
-    export function IdentifierName(text: BindingIdentifier | string): IdentifierName {
-        return { kind: SyntaxKind.IdentifierName, text: typeof text === "string" ? text : text.text, [Syntax.location]: typeof text === "string" ? noTextRange : text[Syntax.location] };
+    export function Number(text: string, flags = TokenFlags.None): NumberLiteral {
+        return { kind: SyntaxKind.NumberLiteral, text, flags, [Syntax.location]: noTextRange }
     }
-    export function IdentifierReference(text: string): IdentifierReference;
-    export function IdentifierReference(text: BindingIdentifier): IdentifierReference;
-    export function IdentifierReference(text: BindingIdentifier | string): IdentifierReference {
-        return { kind: SyntaxKind.IdentifierReference, text: typeof text === "string" ? text : text.text, [Syntax.location]: typeof text === "string" ? noTextRange : text[Syntax.location] };
+    export function RegularExpression(text: string): RegularExpressionLiteral {
+        return { kind: SyntaxKind.RegularExpressionLiteral, text, flags: TokenFlags.None, [Syntax.location]: noTextRange }
     }
-    export function BindingIdentifier(text: string): BindingIdentifier {
-        return { kind: SyntaxKind.BindingIdentifier, text, [Syntax.location]: noTextRange };
+    export function Identifier(text: string): Identifier {
+        return { kind: SyntaxKind.Identifier, text, [Syntax.location]: noTextRange };
     }
     export function ComputedPropertyName(expression: Expression): ComputedPropertyName {
         return { kind: SyntaxKind.ComputedPropertyName, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
@@ -760,23 +207,23 @@ export namespace Syntax {
     export function Index(expression: Expression, argumentExpression: Expression): ElementAccessExpression {
         return { kind: SyntaxKind.ElementAccessExpression, expression: toLeftHandSideExpressionOrHigher(expression), argumentExpression, [Syntax.location]: noTextRange };
     }
-    export function PrefixUnary(operator: PrefixUnaryOperator, expression: Expression): PrefixUnaryExpression {
+    export function PrefixUnary(operator: Token.PrefixUnaryOperator, expression: Expression): PrefixUnaryExpression {
         return { kind: SyntaxKind.PrefixUnaryExpression, operator, expression: toUnaryExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
-    export function PostfixUnary(expression: Expression, operator: PostfixUnaryOperator): PostfixUnaryExpression {
+    export function PostfixUnary(expression: Expression, operator: Token.PostfixUnaryOperator): PostfixUnaryExpression {
         return { kind: SyntaxKind.PostfixUnaryExpression, expression: toLeftHandSideExpressionOrHigher(expression), operator, [Syntax.location]: noTextRange };
     }
-    export function Binary(left: Expression, operator: BinaryOperator, right: Expression): BinaryExpression {
+    export function Binary(left: Expression, operator: Token.BinaryOperator, right: Expression): BinaryExpression {
         const precedence = getBinaryOperatorPrecedence(operator);
         return { kind: SyntaxKind.BinaryExpression, left: toBinaryExpressionOrHigher(left, precedence), operator, right: toBinaryExpressionOrHigher(right, precedence + 1), [Syntax.location]: noTextRange };
     }
-    export function Assign(left: LeftHandSideExpressionOrHigher, operator: AssignmentOperator, right: Expression): AssignmentExpression {
+    export function Assign(left: LeftHandSideExpressionOrHigher, operator: Token.AssignmentOperator, right: Expression): AssignmentExpression {
         return { kind: SyntaxKind.AssignmentExpression, left, operator, right: toAssignmentExpressionOrHigher(right), [Syntax.location]: noTextRange };
     }
     export function Conditional(condition: Expression, whenTrue: Expression, whenFalse: Expression): ConditionalExpression {
         return { kind: SyntaxKind.ConditionalExpression, condition: toBinaryExpressionOrHigher(condition, BinaryPrecedence.LogicalORExpression), whenTrue: toAssignmentExpressionOrHigher(whenTrue), whenFalse: toAssignmentExpressionOrHigher(whenFalse), [Syntax.location]: noTextRange };
     }
-    export function Arrow(async: boolean, parameterList: ReadonlyArray<BindingElement | BindingIdentifier | string>, rest: BindingRestElement | undefined, body: Expression): ArrowFunction {
+    export function Arrow(async: boolean, parameterList: ReadonlyArray<BindingElement | BindingName | string>, rest: BindingRestElement | undefined, body: Expression | Statement): ArrowFunction {
         return { kind: SyntaxKind.ArrowFunction, async, parameterList: visitList(parameterList, toParameter), rest, body: toArrowBody(body), [Syntax.location]: noTextRange };
     }
     export function CommaList(expressions: ReadonlyArray<Expression>): CommaListExpression {
@@ -791,14 +238,14 @@ export namespace Syntax {
     export function Rest(name: BindingName | string): BindingRestElement {
         return Syntax.BindingRestElement(name);
     }
-    export function SequenceBinding(await: boolean, name: BindingIdentifier | string, hierarchyAxisKeyword: HierarchyAxisKeywordKind | undefined, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
+    export function SequenceBinding(await: boolean, name: BindingName | string, hierarchyAxisKeyword: Token.HierarchyAxisKeyword | undefined, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
         name = possiblyBindingIdentifier(name);
         return { kind: SyntaxKind.SequenceBinding, await, name, hierarchyAxisKeyword, expression: toAssignmentExpressionOrHigher(expression), withHierarchy: withHierarchy && toAssignmentExpressionOrHigher(withHierarchy), [Syntax.location]: noTextRange };
     }
     export function FromClause(outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
         return { kind: SyntaxKind.FromClause, outerClause, sequenceBinding, [Syntax.location]: noTextRange };
     }
-    export function LetClause(outerClause: QueryBodyClause, name: BindingIdentifier, expression: Expression): LetClause {
+    export function LetClause(outerClause: QueryBodyClause, name: BindingName, expression: Expression): LetClause {
         return { kind: SyntaxKind.LetClause, outerClause, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
     export function WhereClause(outerClause: QueryBodyClause, expression: Expression): WhereClause {
@@ -807,16 +254,16 @@ export namespace Syntax {
     export function OrderbyClause(outerClause: QueryBodyClause, comparators: ReadonlyArray<OrderbyComparator>): OrderbyClause {
         return { kind: SyntaxKind.OrderbyClause, outerClause, comparators, [Syntax.location]: noTextRange };
     }
-    export function OrderbyComparator(expression: Expression, direction: DirectionKeywordKind | undefined, usingExpression: Expression | undefined): OrderbyComparator {
+    export function OrderbyComparator(expression: Expression, direction: Token.DirectionKeyword | undefined, usingExpression: Expression | undefined): OrderbyComparator {
         return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), direction, usingExpression: usingExpression && toAssignmentExpressionOrHigher(usingExpression), [Syntax.location]: noTextRange };
     }
-    export function GroupClause(outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): GroupClause {
+    export function GroupClause(outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingName | undefined): GroupClause {
         return { kind: SyntaxKind.GroupClause, outerClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
     }
-    export function JoinClause(outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): JoinClause {
+    export function JoinClause(outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
         return { kind: SyntaxKind.JoinClause, outerClause, sequenceBinding, outerKeySelector: toAssignmentExpressionOrHigher(outerKeySelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
     }
-    export function SelectClause(outerClause: QueryBodyClause, expression: Expression, into: BindingIdentifier | undefined): SelectClause {
+    export function SelectClause(outerClause: QueryBodyClause, expression: Expression, into: BindingName | undefined): SelectClause {
         return { kind: SyntaxKind.SelectClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), into, [Syntax.location]: noTextRange };
     }
     export function Query(query: SelectOrGroupClause): QueryExpression {
@@ -824,6 +271,23 @@ export namespace Syntax {
             query.kind !== SyntaxKind.GroupClause ||
             query.into) return assertFail("A query must end with either a 'select' or 'group' clause.");
         return { kind: SyntaxKind.QueryExpression, query, [Syntax.location]: noTextRange };
+    }
+    export function Block(statements: ReadonlyArray<Statement | Expression>): Block {
+        return { kind: SyntaxKind.Block, statements: visitList(statements, toStatement), [Syntax.location]: noTextRange };
+    }
+    export function Let(variables: ReadonlyArray<BindingElement>): LetStatement {
+        return { kind: SyntaxKind.LetStatement, variables, [Syntax.location]: noTextRange };
+    }
+    export function ExpressionStatement(expression: Expression): ExpressionStatement {
+        if (expression.kind === SyntaxKind.ObjectLiteral) expression = Paren(expression);
+        return { kind: SyntaxKind.ExpressionStatement, expression, [Syntax.location]: noTextRange };
+    }
+    export function Return(expression: Expression | undefined): ReturnStatement {
+        return { kind: SyntaxKind.ReturnStatement, expression, [Syntax.location]: noTextRange };
+    }
+
+    function toStatement(node: Statement | Expression): Statement {
+        return isStatement(node) ? node : ExpressionStatement(node);
     }
 
     function leftMost(node: Expression | AssignmentPattern): Expression | AssignmentPattern {
@@ -843,33 +307,35 @@ export namespace Syntax {
         }
     }
 
-    function toParameter(parameter: BindingElement | BindingIdentifier | string) {
-        if (typeof parameter === "string") parameter = Syntax.BindingIdentifier(parameter);
-        if (parameter.kind === SyntaxKind.BindingIdentifier) parameter = Syntax.Param(parameter);
+    function toParameter(parameter: BindingElement | BindingName | string) {
+        if (typeof parameter === "string") parameter = Syntax.Identifier(parameter);
+        if (isBindingName(parameter)) parameter = Syntax.Param(parameter);
         return parameter;
     }
 
-    function toArrowBody(body: Expression) {
-        return leftMost(body).kind === SyntaxKind.ObjectLiteral ? Syntax.Paren(body) :
+    function toArrowBody(body: Expression | Statement): AssignmentExpressionOrHigher | Block {
+        return body.kind === SyntaxKind.Block ? body :
+            isStatement(body) ? Block([body]) :
+            leftMost(body).kind === SyntaxKind.ObjectLiteral ? Paren(body) :
             toAssignmentExpressionOrHigher(body);
     }
 
     function possiblyIdentifierName<T extends Node>(name: T | string): T | IdentifierName {
-        return typeof name === "string" ? Syntax.IdentifierName(name) : name;
+        return typeof name === "string" ? Syntax.Identifier(name) : name;
     }
 
     function possiblyIdentifierReference<T extends Node>(name: T | string): T | IdentifierReference {
-        return typeof name === "string" ? Syntax.IdentifierReference(name) : name;
+        return typeof name === "string" ? Syntax.Identifier(name) : name;
     }
 
     function possiblyBindingIdentifier<T extends Node>(name: T | string): T | BindingIdentifier {
-        return typeof name === "string" ? Syntax.BindingIdentifier(name) : name;
+        return typeof name === "string" ? Syntax.Identifier(name) : name;
     }
 
     function toBinaryExpressionOrHigher(node: Expression, precedence: BinaryPrecedence): BinaryExpressionOrHigher {
         switch (node.kind) {
             case SyntaxKind.BinaryExpression:
-                return getBinaryOperatorPrecedence(node.kind) >= precedence ? node : Syntax.Paren(node);
+                return getBinaryOperatorPrecedence(node.operator) >= precedence ? node : Syntax.Paren(node);
             default:
                 return toUnaryExpressionOrHigher(node);
         }
@@ -1006,19 +472,19 @@ export namespace SyntaxUpdate {
     export function Conditional(node: ConditionalExpression, condition: Expression, whenTrue: Expression, whenFalse: Expression): ConditionalExpression {
         return node.condition !== condition || node.whenTrue !== whenTrue || node.whenFalse !== whenFalse ? assignLocation(Syntax.Conditional(condition, whenTrue, whenFalse), node) : node;
     }
-    export function Arrow(node: ArrowFunction, parameterList: ReadonlyArray<Parameter | BindingIdentifier | string>, rest: BindingRestElement | undefined, body: Expression): ArrowFunction {
+    export function Arrow(node: ArrowFunction, parameterList: ReadonlyArray<Parameter | BindingIdentifier | string>, rest: BindingRestElement | undefined, body: Expression | Statement): ArrowFunction {
         return node.parameterList !== parameterList || node.rest !== rest || node.body !== body ? assignLocation(Syntax.Arrow(node.async, parameterList, rest, body), node) : node;
     }
     export function Comma(node: CommaListExpression, expressions: ReadonlyArray<Expression>): CommaListExpression {
         return node.expressions !== expressions ? assignLocation(Syntax.CommaList(expressions), node) : node;
     }
-    export function SequenceBinding(node: SequenceBinding, name: BindingIdentifier | string, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
+    export function SequenceBinding(node: SequenceBinding, name: BindingName | string, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
         return node.name !== name || node.expression !== expression || node.withHierarchy !== withHierarchy ? assignLocation(Syntax.SequenceBinding(node.await, name, node.hierarchyAxisKeyword, expression, withHierarchy), node) : node;
     }
     export function FromClause(node: FromClause, outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
         return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding ? assignLocation(Syntax.FromClause(outerClause, sequenceBinding), node) : node;
     }
-    export function LetClause(node: LetClause, outerClause: QueryBodyClause, name: BindingIdentifier, expression: Expression): LetClause {
+    export function LetClause(node: LetClause, outerClause: QueryBodyClause, name: BindingName, expression: Expression): LetClause {
         return node.outerClause !== outerClause || node.name !== name || node.expression !== expression ? assignLocation(Syntax.LetClause(outerClause, name, expression), node) : node;
     }
     export function WhereClause(node: WhereClause, outerClause: QueryBodyClause, expression: Expression): WhereClause {
@@ -1030,17 +496,29 @@ export namespace SyntaxUpdate {
     export function OrderbyComparator(node: OrderbyComparator, expression: Expression, usingExpression: Expression | undefined): OrderbyComparator {
         return node.expression !== expression || node.usingExpression !== usingExpression ? assignLocation(Syntax.OrderbyComparator(expression, node.direction, usingExpression), node) : node;
     }
-    export function GroupClause(node: GroupClause, outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): GroupClause {
+    export function GroupClause(node: GroupClause, outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingName | undefined): GroupClause {
         return node.outerClause !== outerClause || node.elementSelector !== elementSelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.GroupClause(outerClause, elementSelector, keySelector, into), node) : node;
     }
-    export function JoinClause(node: JoinClause, outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingIdentifier | undefined): JoinClause {
+    export function JoinClause(node: JoinClause, outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
         return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding || node.outerKeySelector !== outerKeySelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.JoinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), node) : node;
     }
-    export function SelectClause(node: SelectClause, outerClause: QueryBodyClause, expression: Expression, into: BindingIdentifier | undefined): SelectClause {
+    export function SelectClause(node: SelectClause, outerClause: QueryBodyClause, expression: Expression, into: BindingName | undefined): SelectClause {
         return node.outerClause !== outerClause || node.expression !== expression || node.into !== into ? assignLocation(Syntax.SelectClause(outerClause, expression, into), node) : node;
     }
     export function Query(node: QueryExpression, query: GroupClause | SelectClause): QueryExpression {
         return node.query !== query ? assignLocation(Syntax.Query(query), node) : node;
+    }
+    export function Block(node: Block, statements: ReadonlyArray<Statement | Expression>): Block {
+        return node.statements !== statements ? assignLocation(Syntax.Block(statements), node) : node;
+    }
+    export function Let(node: LetStatement, variables: ReadonlyArray<BindingElement>): LetStatement {
+        return node.variables !== variables ? assignLocation(Syntax.Let(variables), node) : node;
+    }
+    export function ExpressionStatement(node: ExpressionStatement, expression: Expression): ExpressionStatement {
+        return node.expression !== expression ? assignLocation(Syntax.ExpressionStatement(expression), node) : node;
+    }
+    export function Return(node: ReturnStatement, expression: Expression | undefined): ReturnStatement {
+        return node.expression !== expression ? assignLocation(Syntax.Return(expression), node) : node;
     }
     export function assignLocation<T extends Node>(node: T, source: Syntax): T {
         node[Syntax.location] = source[Syntax.location];
@@ -1048,31 +526,20 @@ export namespace SyntaxUpdate {
     }
 }
 
-export interface IdentifierReference extends Syntax {
-    readonly kind: SyntaxKind.IdentifierReference;
+export interface Identifier extends Syntax {
+    readonly kind: SyntaxKind.Identifier;
     readonly text: string;
 }
 
-export interface IdentifierName extends Syntax {
-    readonly kind: SyntaxKind.IdentifierName;
-    readonly text: string;
-}
-
-export interface BindingIdentifier extends Syntax {
-    readonly kind: SyntaxKind.BindingIdentifier;
-    readonly text: string;
-}
-
-export type Identifier =
-    | BindingIdentifier
-    | IdentifierReference
-    | IdentifierName;
+export type IdentifierName = Identifier;
+export type BindingIdentifier = Identifier;
+export type IdentifierReference = Identifier;
 
 export function isIdentifier(node: Node): node is Identifier {
     switch (node.kind) {
-        case SyntaxKind.BindingIdentifier:
-        case SyntaxKind.IdentifierReference:
-        case SyntaxKind.IdentifierName:
+        case SyntaxKind.Identifier:
+        case SyntaxKind.Identifier:
+        case SyntaxKind.Identifier:
             return true;
         default:
             return false;
@@ -1084,7 +551,7 @@ export interface ComputedPropertyName extends Syntax {
     readonly expression: AssignmentExpressionOrHigher;
 }
 
-export interface TextLiteralNode<Kind extends TextLiteralKind> extends Syntax {
+export interface TextLiteralNode<Kind extends SyntaxKind.StringLiteral | SyntaxKind.NumberLiteral | SyntaxKind.RegularExpressionLiteral> extends Syntax {
     readonly kind: Kind;
     readonly text: string;
     readonly flags: TokenFlags;
@@ -1101,10 +568,6 @@ export type TextLiteral =
     | NumberLiteral
     | RegularExpressionLiteral;
 
-export function isTextLiteral(node: Node): node is TextLiteral {
-    return isTextLiteralKind(node.kind);
-}
-
 export interface NullLiteral extends Syntax {
     readonly kind: SyntaxKind.NullLiteral;
 }
@@ -1114,28 +577,10 @@ export interface BooleanLiteral extends Syntax {
     readonly value: boolean;
 }
 
-export type KeywordLiteral =
-    | NullLiteral
-    | BooleanLiteral;
-
-export function isKeywordLiteral(node: Node): node is KeywordLiteral {
-    switch (node.kind) {
-        case SyntaxKind.NullLiteral:
-        case SyntaxKind.BooleanLiteral:
-            return true;
-        default:
-            return false;
-    }
-}
-
 export type Literal =
     | TextLiteral
-    | KeywordLiteral;
-
-export function isLiteral(node: Node): node is Literal {
-    return isTextLiteral(node)
-        || isKeywordLiteral(node);
-}
+    | NullLiteral
+    | BooleanLiteral;
 
 export type PropertyName =
     | IdentifierName
@@ -1145,7 +590,7 @@ export type PropertyName =
 
 export function isPropertyName(node: Node): node is PropertyName {
     switch (node.kind) {
-        case SyntaxKind.IdentifierName:
+        case SyntaxKind.Identifier:
         case SyntaxKind.StringLiteral:
         case SyntaxKind.NumberLiteral:
         case SyntaxKind.ComputedPropertyName:
@@ -1162,6 +607,17 @@ export interface ThisExpression extends Syntax {
 export type BindingName =
     | BindingIdentifier
     | BindingPattern;
+
+export function isBindingName(node: Node): node is BindingName {
+    switch (node.kind) {
+        case SyntaxKind.Identifier:
+        case SyntaxKind.ObjectBindingPattern:
+        case SyntaxKind.ArrayBindingPattern:
+            return true;
+        default:
+            return false;
+    }
+}
 
 export interface SpreadElement extends Syntax {
     readonly kind: SyntaxKind.SpreadElement;
@@ -1378,14 +834,19 @@ export type PrimaryExpression =
 export function isPrimaryExpression(node: Node): node is PrimaryExpression {
     switch (node.kind) {
         case SyntaxKind.ThisExpression:
-        case SyntaxKind.IdentifierReference:
+        case SyntaxKind.StringLiteral:
+        case SyntaxKind.NumberLiteral:
+        case SyntaxKind.RegularExpressionLiteral:
+        case SyntaxKind.NullLiteral:
+        case SyntaxKind.BooleanLiteral:
+        case SyntaxKind.Identifier:
         case SyntaxKind.ArrayLiteral:
         case SyntaxKind.ObjectLiteral:
         case SyntaxKind.ParenthesizedExpression:
         case SyntaxKind.NewExpression:
             return true;
         default:
-            return isLiteral(node);
+            return false;
     }
 }
 
@@ -1452,14 +913,14 @@ export function isLeftHandSideExpressionOrHigher(node: Node): node is LeftHandSi
 
 export interface PrefixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PrefixUnaryExpression;
-    readonly operator: PrefixUnaryOperator;
+    readonly operator: Token.PrefixUnaryOperator;
     readonly expression: UnaryExpressionOrHigher;
 }
 
 export interface PostfixUnaryExpression extends Syntax {
     readonly kind: SyntaxKind.PostfixUnaryExpression;
     readonly expression: LeftHandSideExpressionOrHigher;
-    readonly operator: PostfixUnaryOperator;
+    readonly operator: Token.PostfixUnaryOperator;
 }
 
 export type UnaryExpressionOrHigher =
@@ -1480,7 +941,7 @@ export function isUnaryExpressionOrHigher(node: Node): node is UnaryExpressionOr
 export interface BinaryExpression extends Syntax {
     readonly kind: SyntaxKind.BinaryExpression;
     readonly left: BinaryExpressionOrHigher;
-    readonly operator: BinaryOperator;
+    readonly operator: Token.BinaryOperator;
     readonly right: BinaryExpressionOrHigher;
 }
 
@@ -1491,47 +952,6 @@ export interface ConditionalExpression extends Syntax {
     readonly whenFalse: AssignmentExpressionOrHigher;
 }
 
-// HierarchyAxisKeyword :
-//     `rootof`
-//     `parentof`
-//     `selfof`
-//     `childrenof`
-//     `ancestorsof`
-//     `ancestorsorselfof`
-//     `descendantsof`
-//     `descendantsorselfof`
-//     `siblingsof`
-//     `siblingsorselfof`
-export type HierarchyAxisKeywordKind =
-    | SyntaxKind.RootofKeyword
-    | SyntaxKind.ParentofKeyword
-    | SyntaxKind.ChildrenofKeyword
-    | SyntaxKind.AncestorsofKeyword
-    | SyntaxKind.AncestorsorselfofKeyword
-    | SyntaxKind.DescendantsofKeyword
-    | SyntaxKind.DescendantsorselfofKeyword
-    | SyntaxKind.SelfofKeyword
-    | SyntaxKind.SiblingsofKeyword
-    | SyntaxKind.SiblingsorselfofKeyword;
-
-export function isHierarchyAxisKeywordKind(kind: SyntaxKind): kind is HierarchyAxisKeywordKind {
-    switch (kind) {
-        case SyntaxKind.RootofKeyword:
-        case SyntaxKind.ParentofKeyword:
-        case SyntaxKind.ChildrenofKeyword:
-        case SyntaxKind.AncestorsofKeyword:
-        case SyntaxKind.AncestorsorselfofKeyword:
-        case SyntaxKind.DescendantsofKeyword:
-        case SyntaxKind.DescendantsorselfofKeyword:
-        case SyntaxKind.SelfofKeyword:
-        case SyntaxKind.SiblingsofKeyword:
-        case SyntaxKind.SiblingsorselfofKeyword:
-            return true;
-        default:
-            return false;
-    }
-}
-
 // SequenceBinding[Await] :
 //     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await]
 //     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
@@ -1540,8 +960,8 @@ export function isHierarchyAxisKeywordKind(kind: SyntaxKind): kind is HierarchyA
 export interface SequenceBinding extends Syntax {
     readonly kind: SyntaxKind.SequenceBinding;
     readonly await: boolean;
-    readonly name: BindingIdentifier;
-    readonly hierarchyAxisKeyword: HierarchyAxisKeywordKind | undefined;
+    readonly name: BindingName;
+    readonly hierarchyAxisKeyword: Token.HierarchyAxisKeyword | undefined;
     readonly expression: AssignmentExpressionOrHigher;
     readonly withHierarchy: AssignmentExpressionOrHigher | undefined;
 }
@@ -1559,7 +979,7 @@ export interface FromClause extends Syntax {
 export interface LetClause extends Syntax {
     readonly kind: SyntaxKind.LetClause;
     readonly outerClause: QueryBodyClause;
-    readonly name: BindingIdentifier;
+    readonly name: BindingName;
     readonly expression: AssignmentExpressionOrHigher;
 }
 
@@ -1579,10 +999,6 @@ export interface OrderbyClause extends Syntax {
     readonly comparators: ReadonlyArray<OrderbyComparator>;
 }
 
-export type DirectionKeywordKind =
-    | SyntaxKind.AscendingKeyword
-    | SyntaxKind.DescendingKeyword;
-
 // OrderbyComparatorList[Await] :
 //     OrderbyComparator[?Await]
 //     OrderbyComparatorList[?Await] `,` OrderbyComparator[?Await]
@@ -1597,7 +1013,7 @@ export type DirectionKeywordKind =
 export interface OrderbyComparator extends Syntax {
     readonly kind: SyntaxKind.OrderbyComparator;
     readonly expression: AssignmentExpressionOrHigher;
-    readonly direction: DirectionKeywordKind | undefined;
+    readonly direction: Token.DirectionKeyword | undefined;
     readonly usingExpression: AssignmentExpressionOrHigher | undefined;
 }
 
@@ -1608,7 +1024,7 @@ export interface GroupClause extends Syntax {
     readonly outerClause: QueryBodyClause;
     readonly elementSelector: AssignmentExpressionOrHigher;
     readonly keySelector: AssignmentExpressionOrHigher;
-    readonly into: BindingIdentifier | undefined;
+    readonly into: BindingName | undefined;
 }
 
 // JoinClause[Await] :
@@ -1620,7 +1036,7 @@ export interface JoinClause extends Syntax {
     readonly sequenceBinding: SequenceBinding;
     readonly outerKeySelector: AssignmentExpressionOrHigher;
     readonly keySelector: AssignmentExpressionOrHigher;
-    readonly into: BindingIdentifier | undefined;
+    readonly into: BindingName | undefined;
 }
 
 // SelectClause[Await] :
@@ -1629,7 +1045,7 @@ export interface SelectClause extends Syntax {
     readonly kind: SyntaxKind.SelectClause;
     readonly outerClause: QueryBodyClause;
     readonly expression: AssignmentExpressionOrHigher;
-    readonly into: BindingIdentifier | undefined;
+    readonly into: BindingName | undefined;
 }
 
 // QueryBodyClauses[Await] :
@@ -1693,7 +1109,7 @@ export interface ArrowFunction extends Syntax {
     readonly async: boolean;
     readonly parameterList: ReadonlyArray<BindingElement>;
     readonly rest: BindingRestElement | undefined;
-    readonly body: AssignmentExpressionOrHigher;
+    readonly body: AssignmentExpressionOrHigher | Block;
 }
 
 export type BinaryExpressionOrHigher =
@@ -1712,7 +1128,7 @@ export function isBinaryExpressionOrHigher(node: Node): node is BinaryExpression
 export interface AssignmentExpression extends Syntax {
     readonly kind: SyntaxKind.AssignmentExpression;
     readonly left: LeftHandSideExpressionOrHigher;
-    readonly operator: AssignmentOperator;
+    readonly operator: Token.AssignmentOperator;
     readonly right: AssignmentExpressionOrHigher;
 }
 
@@ -1759,6 +1175,45 @@ export interface CoverParenthesizedExpressionAndArrowParameterList extends Synta
     readonly kind: SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList;
     readonly expression: Expression | undefined;
     readonly rest: BindingRestElement | undefined;
+}
+
+export interface Block extends Syntax {
+    readonly kind: SyntaxKind.Block;
+    readonly statements: ReadonlyArray<Statement>;
+}
+
+export interface LetStatement extends Syntax {
+    readonly kind: SyntaxKind.LetStatement;
+    readonly variables: ReadonlyArray<BindingElement>;
+}
+
+export interface ExpressionStatement extends Syntax {
+    readonly kind: SyntaxKind.ExpressionStatement;
+    readonly expression: Expression;
+}
+
+export interface ReturnStatement extends Syntax {
+    readonly kind: SyntaxKind.ReturnStatement;
+    readonly expression: Expression | undefined;
+}
+
+// Expressions that are actually statements.
+export type Statement =
+    | Block
+    | LetStatement
+    | ExpressionStatement
+    | ReturnStatement;
+
+export function isStatement(node: Node): node is Statement {
+    switch (node.kind) {
+        case SyntaxKind.Block:
+        case SyntaxKind.LetStatement:
+        case SyntaxKind.ExpressionStatement:
+        case SyntaxKind.ReturnStatement:
+            return true;
+        default:
+            return false;
+    }
 }
 
 export type Node =
@@ -1830,6 +1285,12 @@ export type Node =
     | ArrayAssignmentPattern
     | AssignmentElement
     | AssignmentRestElement
+
+    // Statements
+    | Block
+    | LetStatement
+    | ExpressionStatement
+    | ReturnStatement
 
     // Cover Grammars
     | CoverParenthesizedExpressionAndArrowParameterList

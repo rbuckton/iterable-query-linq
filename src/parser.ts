@@ -1,27 +1,35 @@
-import { SyntaxKind, Token, QueryBodyClause, FromClause, LetClause, WhereClause,
+import { SyntaxKind, QueryBodyClause, FromClause, LetClause, WhereClause,
     OrderbyClause, OrderbyComparator, GroupClause, JoinClause, Expression,
     ArrayLiteral, ObjectLiteral, NewExpression, PropertyAccessExpression,
     ElementAccessExpression, Elision, SpreadElement, PropertyDefinition,
-    ShorthandPropertyDefinition, PropertyName, ComputedPropertyName, isKeyword,
-    QueryExpression, PrefixUnaryOperator, isPostfixUnaryOperator, UnaryExpressionOrHigher,
-    LeftHandSideExpressionOrHigher, PrimaryExpression, isTextLiteralKind, MemberExpressionOrHigher,
-    TextLiteralKind, TextLiteralNode, ArrayLiteralElement, ObjectLiteralElement, Argument,
-    BinaryOperator, SelectClause, AssignmentExpressionOrHigher, Node,
-    isHierarchyAxisKeywordKind, BindingElement, BindingRestElement,
+    ShorthandPropertyDefinition, PropertyName, ComputedPropertyName, 
+    QueryExpression, UnaryExpressionOrHigher,
+    LeftHandSideExpressionOrHigher, PrimaryExpression, MemberExpressionOrHigher,
+    ArrayLiteralElement, ObjectLiteralElement, Argument,
+    SelectClause, AssignmentExpressionOrHigher, Node,
+    BindingElement, BindingRestElement,
     BindingName, ObjectBindingPattern, ArrayBindingPattern, ArrayBindingPatternElement,
     CoverParenthesizedExpressionAndArrowParameterList, isLeftHandSideExpressionOrHigher,
     CoverInitializedName, BindingIdentifier, IdentifierReference, 
     ObjectBindingPatternElement, BindingRestProperty, BindingProperty, ShorthandBindingProperty,
     ObjectAssignmentPattern, ArrayAssignmentPattern, ObjectAssignmentPatternElement,
     AssignmentRestProperty, ShorthandAssignmentProperty, AssignmentProperty, AssignmentElement,
-    ArrayAssignmentPatternElement, AssignmentRestElement, isAssignmentOperator,
-    AssignmentOperator, AssignmentExpression, BinaryExpressionOrHigher,
+    ArrayAssignmentPatternElement, AssignmentRestElement, 
+    AssignmentExpression, BinaryExpressionOrHigher,
     CommaListExpression, PrefixUnaryExpression, Parameter, SequenceBinding,
-    isECMAScriptReservedWord, IdentifierName,
-    Syntax, createTextRange, HierarchyAxisKeywordKind, ThisExpression, NullLiteral, BooleanLiteral,
-    SyntaxUpdate
-} from "./types";
-import { Scanner, tokenToString } from "./scanner";
+    IdentifierName,
+    Syntax, createTextRange, ThisExpression, NullLiteral, BooleanLiteral,
+    SyntaxUpdate,
+    TextLiteral,
+    StringLiteral,
+    NumberLiteral,
+    RegularExpressionLiteral,
+    Identifier
+} from "./syntax";
+import { 
+    Token, TokenFlags, 
+} from "./tokens";
+import { Scanner } from "./scanner";
 import { RecoverableSyntaxError, UnrecoverableSyntaxError } from "./errors";
 import { BinaryPrecedence, getBinaryOperatorPrecedence, assertNever, assertFail, visitList } from "./utils";
 
@@ -44,9 +52,9 @@ export class Parser {
         this._scanner.scan();
         this._async = async;
         // treat as inside expression statement
-        if (this.token() === SyntaxKind.OpenBraceToken) return this.errorAtToken("Unexpected token.");
+        if (this.token() === Token.OpenBraceToken) return this.errorAtToken("Unexpected token.");
         const expression = this.parseAndRefineExpression(/*In*/ true, /*Await*/ this._async);
-        if (this.token() !== SyntaxKind.EndOfFileToken) return this.errorAtToken("Unexpected token.");
+        if (this.token() !== Token.EndOfFileToken) return this.errorAtToken("Unexpected token.");
         return expression;
     }
 
@@ -82,7 +90,7 @@ export class Parser {
         return this.errorAtPosEnd(message, pos, end, recoverable);
     }
 
-    private errorAtToken(message: string, recoverable = this.token() === SyntaxKind.EndOfFileToken): never {
+    private errorAtToken(message: string, recoverable = this.token() === Token.EndOfFileToken): never {
         return this.errorAtPosEnd(message, this._scanner.tokenPos(), this._scanner.textPos(), recoverable);
     }
 
@@ -90,19 +98,19 @@ export class Parser {
         return this.errorAtPosEnd(message, Syntax.pos(node), Syntax.end(node), recoverable);
     }
 
-    private readToken<Kind extends Token>(kind: Kind): Kind {
+    private readToken<Kind extends Token.SourceToken>(kind: Kind): Kind {
         this.expectToken(kind);
         return kind;
     }
 
-    private expectToken(kind: Token) {
+    private expectToken(kind: Token.SourceToken) {
         if (this.token() !== kind) {
-            this.errorAtToken(`'${tokenToString(kind)}' expected.`, /*recoverable*/ true);
+            this.errorAtToken(`'${Token.tokenToString(kind)}' expected.`, /*recoverable*/ true);
         }
         this.nextToken();
     }
 
-    private optionalToken(kind: Token) {
+    private optionalToken(kind: Token.SourceToken) {
         if (this.token() === kind) {
             this.nextToken();
             return true;
@@ -110,41 +118,46 @@ export class Parser {
         return false;
     }
 
-    private listElement<T>(value: T, endToken: SyntaxKind): T {
-        if (this.token() !== endToken) this.expectToken(SyntaxKind.CommaToken);
+    private listElement<T>(value: T, endToken: Token): T {
+        if (this.token() !== endToken) this.expectToken(Token.CommaToken);
         return value;
     }
 
-    private parseLiteral<Kind extends TextLiteralKind>(kind: Kind): TextLiteralNode<Kind> {
-        const token = this.token();
-        if (!isTextLiteralKind(token)) {
-            const kindString =
-                kind === SyntaxKind.StringLiteral ? "string" :
-                kind === SyntaxKind.NumberLiteral ? "number" :
-                "regex";
-            this.errorAtToken(`${kindString} expected.`);
-        }
+    private parseStringLiteral(): StringLiteral {
+        return this.parseLiteral(Token.StringLiteral, "string", Syntax.String);
+    }
+
+    private parseNumberLiteral(): NumberLiteral {
+        return this.parseLiteral(Token.NumberLiteral, "number", Syntax.Number);
+    }
+
+    private parseRegularExpressionLiteral(): RegularExpressionLiteral {
+        return this.parseLiteral(Token.RegularExpressionLiteral, "regular expression", Syntax.RegularExpression);
+    }
+
+    private parseLiteral<T extends TextLiteral>(token: Token.TextLiteral, kind: string, factory: (text: string, flags: TokenFlags) => T) {
+        if (this.token() !== token) return this.errorAtToken(`${kind} expected.`);
         const pos = this.pos();
         const text = this._scanner.tokenText();
         const flags = this._scanner.tokenFlags();
         this.nextToken();
         // Text literals cannot be further refined
-        return this.finishRefine(this.finishNode(Syntax.Literal(kind, text, flags), pos));
+        return this.finishRefine(this.finishNode(factory(text, flags), pos));
     }
 
     private parseBindingIdentifier(Await: boolean): BindingIdentifier {
-        return this.parseIdentifier(/*allowReservedWords*/ false, !Await, Syntax.BindingIdentifier);
+        return this.parseIdentifier(/*allowReservedWords*/ false, !Await);
     }
 
     private parseIdentifierReference(Await: boolean): IdentifierReference {
-        return this.parseIdentifier(/*allowReservedWords*/ false, !Await, Syntax.IdentifierReference);
+        return this.parseIdentifier(/*allowReservedWords*/ false, !Await);
     }
 
     private parseIdentifierName(): IdentifierName {
-        return this.parseIdentifier(/*allowReservedWords*/ true, /*allowAwait*/ true, Syntax.IdentifierName);
+        return this.parseIdentifier(/*allowReservedWords*/ true, /*allowAwait*/ true);
     }
 
-    private parseIdentifier<T extends BindingIdentifier | IdentifierReference | IdentifierName>(allowReservedWords: boolean, allowAwait: boolean, factory: (text: string) => T): T {
+    private parseIdentifier(allowReservedWords: boolean, allowAwait: boolean): Identifier {
         if (!mayBeIdentifier(this.token(), allowReservedWords, allowAwait)) {
             return this.errorAtToken("Identifier expected.");
         }
@@ -152,14 +165,14 @@ export class Parser {
         const text = this._scanner.tokenText();
         this.nextToken();
         // Identifier cannot be further refined
-        return this.finishRefine(this.finishNode(factory(text), pos));
+        return this.finishRefine(this.finishNode(Syntax.Identifier(text), pos));
     }
 
     private parseComputedPropertyName(Await: boolean): ComputedPropertyName {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenBracketToken);
+        this.expectToken(Token.OpenBracketToken);
         const expression = this.parseAndRefineExpression(/*In*/ true, Await);
-        this.expectToken(SyntaxKind.CloseBracketToken);
+        this.expectToken(Token.CloseBracketToken);
         // ComputedPropertyName cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.ComputedPropertyName(expression), pos));
     }
@@ -167,36 +180,36 @@ export class Parser {
     private parsePropertyName(Await: boolean): PropertyName {
         const token = this.token();
         switch (token) {
-            case SyntaxKind.StringLiteral: return this.parseLiteral(token);
-            case SyntaxKind.NumberLiteral: return this.parseLiteral(token);
-            case SyntaxKind.Identifier: return this.parseIdentifierName();
-            case SyntaxKind.OpenBracketToken: return this.parseComputedPropertyName(Await);
+            case Token.StringLiteral: return this.parseStringLiteral();
+            case Token.NumberLiteral: return this.parseNumberLiteral();
+            case Token.Identifier: return this.parseIdentifierName();
+            case Token.OpenBracketToken: return this.parseComputedPropertyName(Await);
             default: return this.errorAtToken(`string, number, identifier or '[' expected.`);
         }
     }
 
-    private tryParseHierarchyAxisKeyword(): HierarchyAxisKeywordKind | undefined {
+    private tryParseHierarchyAxisKeyword(): Token.HierarchyAxisKeyword | undefined {
         const token = this.token();
-        if (isHierarchyAxisKeywordKind(token)) {
+        if (Token.isHierarchyAxisKeyword(token)) {
             return this.readToken(token);
         }
     }
 
     // SequenceBinding[Await] :
-    //     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
-    //     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
-    //     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
-    //     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
+    //     BindingName[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
+    //     BindingName[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
+    //     [+Await] `await` BindingName[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] 
+    //     [+Await] `await` BindingName[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
     private parseSequenceBinding(Await: boolean): SequenceBinding {
         const pos = this.pos();
-        const awaitKeyword = Await ? this.optionalToken(SyntaxKind.AwaitKeyword) : false;
-        const name = this.parseBindingIdentifier(Await);
-        this.expectToken(SyntaxKind.InKeyword);
+        const awaitKeyword = Await ? this.optionalToken(Token.AwaitKeyword) : false;
+        const name = this.parseBindingName(Await);
+        this.expectToken(Token.InKeyword);
         const hierarchyAxisKeyword = this.tryParseHierarchyAxisKeyword();
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         let withHierarchy: AssignmentExpressionOrHigher | undefined;
-        if (this.optionalToken(SyntaxKind.WithKeyword)) {
-            this.expectToken(SyntaxKind.HierarchyKeyword);
+        if (this.optionalToken(Token.WithKeyword)) {
+            this.expectToken(Token.HierarchyKeyword);
             withHierarchy = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         }
         // SequenceBinding cannot be further refined
@@ -207,19 +220,19 @@ export class Parser {
     //     `from` SequenceBinding[?Await]
     private parseFromClause(Await: boolean, outerClause: QueryBodyClause | undefined): FromClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.FromKeyword);
+        this.expectToken(Token.FromKeyword);
         const sequenceBinding = this.parseSequenceBinding(Await);
         // FromClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.FromClause(outerClause, sequenceBinding), pos));
     }
 
     // LetClause[Await] :
-    //     `let` BindingIdentifier[?Await] `=` AssignmentExpression[+In, ?Await]
+    //     `let` BindingName[?Await] `=` AssignmentExpression[+In, ?Await]
     private parseLetClause(Await: boolean, outerClause: QueryBodyClause): LetClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.LetKeyword);
-        const name = this.parseBindingIdentifier(Await);
-        this.expectToken(SyntaxKind.EqualsToken);
+        this.expectToken(Token.LetKeyword);
+        const name = this.parseBindingName(Await);
+        this.expectToken(Token.EqualsToken);
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         // LetClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.LetClause(outerClause, name, expression), pos));
@@ -229,7 +242,7 @@ export class Parser {
     //     `where` AssignmentExpression[+In, ?Await]
     private parseWhereClause(Await: boolean, outerClause: QueryBodyClause): WhereClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.WhereKeyword);
+        this.expectToken(Token.WhereKeyword);
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         // WhereClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.WhereClause(outerClause, expression), pos));
@@ -239,10 +252,10 @@ export class Parser {
     //     `orderby` OrderbyComparatorList[?Await]
     private parseOrderbyClause(Await: boolean, outerClause: QueryBodyClause): OrderbyClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OrderbyKeyword);
+        this.expectToken(Token.OrderbyKeyword);
         const comparators: OrderbyComparator[] = [];
         do comparators.push(this.parseOrderbyComparator(Await));
-        while (this.optionalToken(SyntaxKind.CommaToken));
+        while (this.optionalToken(Token.CommaToken));
         // OrderbyClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.OrderbyClause(outerClause, comparators), pos));
     }
@@ -262,10 +275,10 @@ export class Parser {
         const pos = this.pos();
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         const direction =
-            this.optionalToken(SyntaxKind.AscendingKeyword) ? SyntaxKind.AscendingKeyword :
-            this.optionalToken(SyntaxKind.DescendingKeyword) ? SyntaxKind.DescendingKeyword :
+            this.optionalToken(Token.AscendingKeyword) ? Token.AscendingKeyword :
+            this.optionalToken(Token.DescendingKeyword) ? Token.DescendingKeyword :
             undefined;
-        const usingExpression = this.optionalToken(SyntaxKind.UsingKeyword) ? this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await) : undefined;
+        const usingExpression = this.optionalToken(Token.UsingKeyword) ? this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await) : undefined;
         // OrderbyComparator cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.OrderbyComparator(expression, direction, usingExpression), pos));
     }
@@ -274,11 +287,11 @@ export class Parser {
     //     `group` AssignmentExpression[+In, ?Await] `by` AssignmentExpression[+In, ?Await]
     private parseGroupClause(Await: boolean, outerClause: QueryBodyClause): GroupClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.GroupKeyword);
+        this.expectToken(Token.GroupKeyword);
         const elementSelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        this.expectToken(SyntaxKind.ByKeyword);
+        this.expectToken(Token.ByKeyword);
         const keySelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
+        const into = this.optionalToken(Token.IntoKeyword) ? this.parseBindingName(Await) : undefined;
         // GroupClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.GroupClause(outerClause, elementSelector, keySelector, into), pos));
     }
@@ -288,13 +301,13 @@ export class Parser {
     //     `join` SequenceBinding[?Await] `in` SequenceSource[?Await] `on` AssignmentExpression[+In, ?Await] `equals` AssignmentExpression[+In, ?Await] `into` BindingIdentifier[?Await]
     private parseJoinClause(Await: boolean, outerClause: QueryBodyClause): JoinClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.JoinKeyword);
+        this.expectToken(Token.JoinKeyword);
         const sequenceBinding = this.parseSequenceBinding(Await);
-        this.expectToken(SyntaxKind.OnKeyword);
+        this.expectToken(Token.OnKeyword);
         const outerKeySelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        this.expectToken(SyntaxKind.EqualsKeyword);
+        this.expectToken(Token.EqualsKeyword);
         const keySelector = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
+        const into = this.optionalToken(Token.IntoKeyword) ? this.parseBindingName(Await) : undefined;
         // JoinClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.JoinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), pos));
     }
@@ -303,9 +316,9 @@ export class Parser {
     //     `select` AssignmentExpression[+In, ?Await]
     private parseSelectClause(Await: boolean, outerClause: QueryBodyClause): SelectClause {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.SelectKeyword);
+        this.expectToken(Token.SelectKeyword);
         const expression = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        const into = this.optionalToken(SyntaxKind.IntoKeyword) ? this.parseBindingIdentifier(Await) : undefined;
+        const into = this.optionalToken(Token.IntoKeyword) ? this.parseBindingName(Await) : undefined;
         // SelectClause cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.SelectClause(outerClause, expression, into), pos));
     }
@@ -326,13 +339,13 @@ export class Parser {
     //     GroupClause[?Await]
     private parseQueryBodyClause(Await: boolean, outerClause: QueryBodyClause): QueryBodyClause {
         switch (this.token()) {
-            case SyntaxKind.FromKeyword: return this.parseFromClause(Await, outerClause);
-            case SyntaxKind.LetKeyword: return this.parseLetClause(Await, outerClause);
-            case SyntaxKind.WhereKeyword: return this.parseWhereClause(Await, outerClause);
-            case SyntaxKind.OrderbyKeyword: return this.parseOrderbyClause(Await, outerClause);
-            case SyntaxKind.GroupKeyword: return this.parseGroupClause(Await, outerClause);
-            case SyntaxKind.JoinKeyword: return this.parseJoinClause(Await, outerClause);
-            case SyntaxKind.SelectKeyword: return this.parseSelectClause(Await, outerClause);
+            case Token.FromKeyword: return this.parseFromClause(Await, outerClause);
+            case Token.LetKeyword: return this.parseLetClause(Await, outerClause);
+            case Token.WhereKeyword: return this.parseWhereClause(Await, outerClause);
+            case Token.OrderbyKeyword: return this.parseOrderbyClause(Await, outerClause);
+            case Token.GroupKeyword: return this.parseGroupClause(Await, outerClause);
+            case Token.JoinKeyword: return this.parseJoinClause(Await, outerClause);
+            case Token.SelectKeyword: return this.parseSelectClause(Await, outerClause);
             default: return this.errorAtToken(`'from', 'let', 'where', 'orderby', 'group', 'join', or 'select' expected.`);
         }
     }
@@ -362,14 +375,14 @@ export class Parser {
 
     private parseCoverParenthesizedExpressionAndArrowParameterList(Await: boolean): CoverParenthesizedExpressionAndArrowParameterList {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenParenToken);
+        this.expectToken(Token.OpenParenToken);
         const expression =
-            this.token() !== SyntaxKind.CloseParenToken &&
-            this.token() !== SyntaxKind.DotDotDotToken ? this.parseExpression(/*In*/ true, Await) : undefined;
-        const rest = (!expression || this.optionalToken(SyntaxKind.CommaToken)) && this.token() === SyntaxKind.DotDotDotToken 
+            this.token() !== Token.CloseParenToken &&
+            this.token() !== Token.DotDotDotToken ? this.parseExpression(/*In*/ true, Await) : undefined;
+        const rest = (!expression || this.optionalToken(Token.CommaToken)) && this.token() === Token.DotDotDotToken 
             ? this.parseBindingRestElement(Await) 
             : undefined;
-        this.expectToken(SyntaxKind.CloseParenToken);
+        this.expectToken(Token.CloseParenToken);
         // CoverParenthesizedExpressionAndArrowParameterList can be further refined
         return this.finishNode(createCoverParenthesizedExpressionAndArrowParameterList(expression, rest), pos);
     }
@@ -386,27 +399,27 @@ export class Parser {
 
     private parseSpreadElement(Await: boolean): SpreadElement {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.DotDotDotToken);
+        this.expectToken(Token.DotDotDotToken);
         // SpreadElement can be further refined
         return this.finishNode(Syntax.SpreadElement(this.parseLeftHandSideExpressionOrHigher(Await)), pos);
     }
 
     private parseArrayLiteralElement(Await: boolean): ArrayLiteralElement {
         switch (this.token()) {
-            case SyntaxKind.CommaToken: return this.parseElision();
-            case SyntaxKind.DotDotDotToken: return this.parseSpreadElement(Await);
+            case Token.CommaToken: return this.parseElision();
+            case Token.DotDotDotToken: return this.parseSpreadElement(Await);
             default: return this.parseAssignmentExpressionOrHigher(/*In*/ true, Await);
         }
     }
 
     private parseArrayLiteral(Await: boolean): ArrayLiteral {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenBracketToken);
+        this.expectToken(Token.OpenBracketToken);
         const elements: ArrayLiteralElement[] = [];
-        while (this.token() !== SyntaxKind.CloseBracketToken) {
-            elements.push(this.listElement(this.parseArrayLiteralElement(Await), SyntaxKind.CloseBracketToken));
+        while (this.token() !== Token.CloseBracketToken) {
+            elements.push(this.listElement(this.parseArrayLiteralElement(Await), Token.CloseBracketToken));
         }
-        this.expectToken(SyntaxKind.CloseBracketToken);
+        this.expectToken(Token.CloseBracketToken);
         // ArrayLiteral can be further refined
         return this.finishNode(Syntax.ArrayLiteral(elements), pos);
     }
@@ -414,11 +427,11 @@ export class Parser {
     private parsePropertyDefinition(Await: boolean): PropertyDefinition | ShorthandPropertyDefinition | CoverInitializedName {
         const pos = this.pos();
         const name = this.parsePropertyName(Await);
-        if (this.optionalToken(SyntaxKind.ColonToken)) {
+        if (this.optionalToken(Token.ColonToken)) {
             // PropertyDefinition can be further refined
             return this.finishNode(Syntax.PropertyDefinition(name, this.parseAssignmentExpressionOrHigher(/*In*/ true, Await)), pos);
         }
-        if (name.kind !== SyntaxKind.IdentifierName) return this.errorAtToken(`Unexpected token.`);
+        if (name.kind !== SyntaxKind.Identifier) return this.errorAtToken(`Unexpected token.`);
         const initializer = this.parseInitializer(Await);
         if (initializer) {
             // CoverInitializedName can be further refined
@@ -430,69 +443,69 @@ export class Parser {
 
     private parseObjectLiteralElement(Await: boolean): ObjectLiteralElement {
         switch (this.token()) {
-            case SyntaxKind.DotDotDotToken: return this.parseSpreadElement(Await);
-            case SyntaxKind.Identifier:
-            case SyntaxKind.StringLiteral:
-            case SyntaxKind.NumberLiteral:
-            case SyntaxKind.OpenBracketToken: return this.parsePropertyDefinition(Await);
+            case Token.DotDotDotToken: return this.parseSpreadElement(Await);
+            case Token.Identifier:
+            case Token.StringLiteral:
+            case Token.NumberLiteral:
+            case Token.OpenBracketToken: return this.parsePropertyDefinition(Await);
             default: return this.errorAtToken(`string, number, identifier, '[', or '...' expected.`);
         }
     }
 
     private parseObjectLiteral(Await: boolean): ObjectLiteral {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenBraceToken);
+        this.expectToken(Token.OpenBraceToken);
         const properties: ObjectLiteralElement[] = [];
-        while (this.token() !== SyntaxKind.CloseBraceToken) {
-            properties.push(this.listElement(this.parseObjectLiteralElement(Await), SyntaxKind.CloseBraceToken));
+        while (this.token() !== Token.CloseBraceToken) {
+            properties.push(this.listElement(this.parseObjectLiteralElement(Await), Token.CloseBraceToken));
         }
-        this.expectToken(SyntaxKind.CloseBraceToken);
+        this.expectToken(Token.CloseBraceToken);
         // ObjectLiteral can be further refined
         return this.finishNode(Syntax.ObjectLiteral(properties), pos);
     }
 
     private parseArgument(Await: boolean) {
         switch (this.token()) {
-            case SyntaxKind.DotDotDotToken: return this.parseAndRefineSpreadElement(Await);
+            case Token.DotDotDotToken: return this.parseAndRefineSpreadElement(Await);
             default: return this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
         }
     }
 
     private parseArgumentList(Await: boolean): ReadonlyArray<Argument> {
         const argumentList: Argument[] = [];
-        this.expectToken(SyntaxKind.OpenParenToken);
-        while (this.token() !== SyntaxKind.CloseParenToken) {
-            argumentList.push(this.listElement(this.parseArgument(Await), SyntaxKind.CloseParenToken));
+        this.expectToken(Token.OpenParenToken);
+        while (this.token() !== Token.CloseParenToken) {
+            argumentList.push(this.listElement(this.parseArgument(Await), Token.CloseParenToken));
         }
-        this.expectToken(SyntaxKind.CloseParenToken);
+        this.expectToken(Token.CloseParenToken);
         return argumentList;
     }
 
     private parseNewExpression(Await: boolean): NewExpression {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.NewKeyword);
+        this.expectToken(Token.NewKeyword);
         const expression = this.parseMemberExpressionRest(Await, this.parseAndRefinePrimaryExpression(Await));
-        const argumentList = this.token() === SyntaxKind.OpenParenToken ? this.parseArgumentList(Await) : undefined;
+        const argumentList = this.token() === Token.OpenParenToken ? this.parseArgumentList(Await) : undefined;
         // NewExpression cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.New(expression, argumentList), pos));
     }
 
     private parseThisExpression(): ThisExpression {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.ThisKeyword);
+        this.expectToken(Token.ThisKeyword);
         return this.finishRefine(this.finishNode(Syntax.This(), pos));
     }
 
     private parseNullLiteral(): NullLiteral {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.NullKeyword);
+        this.expectToken(Token.NullKeyword);
         return this.finishRefine(this.finishNode(Syntax.Null(), pos));
     }
 
-    private parseBooleanLiteral(kind: SyntaxKind.TrueKeyword | SyntaxKind.FalseKeyword): BooleanLiteral {
+    private parseBooleanLiteral(kind: Token.TrueKeyword | Token.FalseKeyword): BooleanLiteral {
         const pos = this.pos();
         this.expectToken(kind);
-        return this.finishRefine(this.finishNode(Syntax.Boolean(kind === SyntaxKind.TrueKeyword), pos));
+        return this.finishRefine(this.finishNode(Syntax.Boolean(kind === Token.TrueKeyword), pos));
     }
 
     private parseAndRefinePrimaryExpression(Await: boolean): PrimaryExpression {
@@ -502,18 +515,18 @@ export class Parser {
     private parsePrimaryExpression(Await: boolean): PrimaryExpression {
         const token = this._scanner.rescanSlash();
         switch (token) {
-            case SyntaxKind.ThisKeyword: return this.parseThisExpression();
-            case SyntaxKind.NumberLiteral: return this.parseLiteral(token);
-            case SyntaxKind.StringLiteral: return this.parseLiteral(token);
-            case SyntaxKind.RegularExpressionLiteral: return this.parseLiteral(SyntaxKind.RegularExpressionLiteral);
-            case SyntaxKind.NullKeyword: return this.parseNullLiteral();
-            case SyntaxKind.TrueKeyword: 
-            case SyntaxKind.FalseKeyword: return this.parseBooleanLiteral(token);
-            case SyntaxKind.OpenParenToken: return this.parseCoverParenthesizedExpressionAndArrowParameterList(Await);
-            case SyntaxKind.OpenBracketToken: return this.parseArrayLiteral(Await);
-            case SyntaxKind.OpenBraceToken: return this.parseObjectLiteral(Await);
-            case SyntaxKind.NewKeyword: return this.parseNewExpression(Await);
-            case SyntaxKind.Identifier: return this.parseIdentifierReference(Await);
+            case Token.ThisKeyword: return this.parseThisExpression();
+            case Token.StringLiteral: return this.parseStringLiteral();
+            case Token.NumberLiteral: return this.parseNumberLiteral();
+            case Token.RegularExpressionLiteral: return this.parseRegularExpressionLiteral();
+            case Token.NullKeyword: return this.parseNullLiteral();
+            case Token.TrueKeyword: 
+            case Token.FalseKeyword: return this.parseBooleanLiteral(token);
+            case Token.OpenParenToken: return this.parseCoverParenthesizedExpressionAndArrowParameterList(Await);
+            case Token.OpenBracketToken: return this.parseArrayLiteral(Await);
+            case Token.OpenBraceToken: return this.parseObjectLiteral(Await);
+            case Token.NewKeyword: return this.parseNewExpression(Await);
+            case Token.Identifier: return this.parseIdentifierReference(Await);
             default: return this.errorAtToken(`Expression expected.`);
         }
     }
@@ -527,17 +540,17 @@ export class Parser {
     private parseElementAccessExpressionRest(Await: boolean, expression: LeftHandSideExpressionOrHigher): ElementAccessExpression {
         const pos = Syntax.pos(expression);
         const argumentExpression = this.parseAndRefineExpression(/*In*/ true, Await);
-        this.expectToken(SyntaxKind.CloseBracketToken);
+        this.expectToken(Token.CloseBracketToken);
         // ElementAccessExpression cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.Index(this.refineLeftHandSideExpressionOrHigher(expression), argumentExpression), pos));
     }
 
     private parseMemberExpressionRest(Await: boolean, expression: LeftHandSideExpressionOrHigher): MemberExpressionOrHigher {
         while (true) {
-            if (this.optionalToken(SyntaxKind.DotToken)) {
+            if (this.optionalToken(Token.DotToken)) {
                 expression = this.parsePropertyAccessExpressionRest(expression);
             }
-            else if (this.optionalToken(SyntaxKind.OpenBracketToken)) {
+            else if (this.optionalToken(Token.OpenBracketToken)) {
                 expression = this.parseElementAccessExpressionRest(Await, expression);
             }
             else {
@@ -553,7 +566,7 @@ export class Parser {
     private parseCallExpressionRest(Await: boolean, expression: LeftHandSideExpressionOrHigher): LeftHandSideExpressionOrHigher {
         while (true) {
             expression = this.parseMemberExpressionRest(Await, expression);
-            if (this.token() === SyntaxKind.OpenParenToken) {
+            if (this.token() === Token.OpenParenToken) {
                 // CallExpression cannot be further refined
                 expression = this.finishRefine(this.finishNode(Syntax.Call(this.refineLeftHandSideExpressionOrHigher(expression), this.parseArgumentList(Await)), Syntax.pos(expression)));
                 continue;
@@ -566,8 +579,8 @@ export class Parser {
         return this.parseCallExpressionRest(Await, this.parseMemberExpressionOrHigher(Await));
     }
 
-    private parsePrefixUnaryExpression(Await: boolean, kind: PrefixUnaryOperator): PrefixUnaryExpression {
-        if (kind === SyntaxKind.AwaitKeyword && !this._async) return this.errorAtToken(`'await' not supported in a synchronous 'linq' block.`, false);
+    private parsePrefixUnaryExpression(Await: boolean, kind: Token.PrefixUnaryOperator): PrefixUnaryExpression {
+        if (kind === Token.AwaitKeyword && !this._async) return this.errorAtToken(`'await' not supported in a synchronous 'linq' block.`, false);
         const pos = this.pos();
         // PrefixUnaryExpression cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.PrefixUnary(this.readToken(kind), this.parseAndRefineUnaryExpressionOrHigher(Await)), pos));
@@ -575,7 +588,7 @@ export class Parser {
 
     private parsePostfixUnaryExpressionRest(expression: LeftHandSideExpressionOrHigher): UnaryExpressionOrHigher {
         const token = this.token();
-        if (isPostfixUnaryOperator(token)) {
+        if (Token.isPostfixUnaryOperator(token)) {
             // PostixUnaryExpression cannot be further refined
             return this.finishRefine(this.finishNode(Syntax.PostfixUnary(this.refineLeftHandSideExpressionOrHigher(expression), this.readToken(token)), Syntax.pos(expression)));
         }
@@ -589,14 +602,14 @@ export class Parser {
     private parseUnaryExpressionOrHigher(Await: boolean): UnaryExpressionOrHigher {
         const token = this.token();
         switch (token) {
-            case SyntaxKind.PlusToken:
-            case SyntaxKind.MinusToken:
-            case SyntaxKind.TildeToken:
-            case SyntaxKind.ExclamationToken:
-            case SyntaxKind.TypeofKeyword:
-            case SyntaxKind.DeleteKeyword:
-            case SyntaxKind.VoidKeyword:
-            case SyntaxKind.AwaitKeyword:
+            case Token.PlusToken:
+            case Token.MinusToken:
+            case Token.TildeToken:
+            case Token.ExclamationToken:
+            case Token.TypeofKeyword:
+            case Token.DeleteKeyword:
+            case Token.VoidKeyword:
+            case Token.AwaitKeyword:
                 return this.parsePrefixUnaryExpression(Await, token);
             default:
                 return this.parsePostfixUnaryExpressionRest(this.parseLeftHandSideExpressionOrHigher(Await));
@@ -607,12 +620,12 @@ export class Parser {
         while (true) {
             const token = this.token();
             const newPrecedence = getBinaryOperatorPrecedence(token);
-            if (!(token === SyntaxKind.AsteriskAsteriskToken ? newPrecedence >= precedence : newPrecedence > precedence)) break;
-            if (token === SyntaxKind.InKeyword && !In) break;
+            if (!(token === Token.AsteriskAsteriskToken ? newPrecedence >= precedence : newPrecedence > precedence)) break;
+            if (token === Token.InKeyword && !In) break;
             // BinaryExpression cannot be further refined
             left = this.finishRefine(this.finishNode(Syntax.Binary(
                 this.refineBinaryExpressionOrHigher(left),
-                this.readToken(token as BinaryOperator),
+                this.readToken(token as Token.BinaryOperator),
                 this.parseAndRefineBinaryExpressionOrHigher(newPrecedence >= BinaryPrecedence.ShiftExpression || In, Await, newPrecedence)), Syntax.pos(left)));
         }
         return left;
@@ -627,10 +640,10 @@ export class Parser {
     }
 
     private parseConditionalExpressionRest(In: boolean, Await: boolean, expression: BinaryExpressionOrHigher): AssignmentExpressionOrHigher {
-        if (!this.optionalToken(SyntaxKind.QuestionToken)) return expression;
-        this.expectToken(SyntaxKind.QuestionToken);
+        if (!this.optionalToken(Token.QuestionToken)) return expression;
+        this.expectToken(Token.QuestionToken);
         const whenTrue = this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await);
-        this.expectToken(SyntaxKind.ColonToken);
+        this.expectToken(Token.ColonToken);
         // ConditionalExpression cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.Conditional(this.refineBinaryExpressionOrHigher(expression), whenTrue, this.parseAndRefineAssignmentExpressionOrHigher(In, Await)), Syntax.pos(expression)));
     }
@@ -638,12 +651,12 @@ export class Parser {
     private parseBindingProperty(Await: boolean): BindingProperty | ShorthandBindingProperty {
         const pos = this.pos();
         const name = this.parsePropertyName(Await);
-        if (this.optionalToken(SyntaxKind.ColonToken)) {
+        if (this.optionalToken(Token.ColonToken)) {
             const bindingElement = this.parseBindingElement(Await);
             // BindingProperty cannot be further refined
             return this.finishRefine(this.finishNode(Syntax.BindingProperty(name, bindingElement), pos));
         }
-        if (name.kind !== SyntaxKind.IdentifierName) {
+        if (name.kind !== SyntaxKind.Identifier) {
             return this.errorAtNode(`Identifier or binding pattern expected.`, name, false);
         }
         const initializer = this.parseInitializer(Await);
@@ -653,7 +666,7 @@ export class Parser {
 
     private parseBindingRestProperty(Await: boolean): BindingRestProperty {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.DotDotDotToken);
+        this.expectToken(Token.DotDotDotToken);
         const name = this.parseBindingIdentifier(Await);
         // BindingRestProperty cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.BindingRestProperty(name), pos));
@@ -661,28 +674,28 @@ export class Parser {
 
     private parseObjectBindingPattern(Await: boolean): ObjectBindingPattern {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenBraceToken);
+        this.expectToken(Token.OpenBraceToken);
         const properties: ObjectBindingPatternElement[] = [];
         let rest: BindingRestProperty | undefined;
-        while (this.token() !== SyntaxKind.CloseBraceToken) {
+        while (this.token() !== Token.CloseBraceToken) {
             if (rest) return this.errorAtToken(`Unexpected token.`);
             switch (this.token()) {
-                case SyntaxKind.DotDotDotToken:
+                case Token.DotDotDotToken:
                     rest = this.parseBindingRestProperty(Await);
                     continue;
                 default:
-                    properties.push(this.listElement(this.parseBindingProperty(Await), SyntaxKind.CloseBraceToken));
+                    properties.push(this.listElement(this.parseBindingProperty(Await), Token.CloseBraceToken));
                     continue;
             }
         }
-        this.expectToken(SyntaxKind.CloseBraceToken);
+        this.expectToken(Token.CloseBraceToken);
         // ObjectBindingPattern cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.ObjectBindingPattern(properties, rest), pos));
     }
 
     private parseBindingRestElement(Await: boolean): BindingRestElement {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.DotDotDotToken);
+        this.expectToken(Token.DotDotDotToken);
         const name = this.parseBindingName(Await);
         // BindingRestElement cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.BindingRestElement(name), pos));
@@ -698,73 +711,73 @@ export class Parser {
 
     private parseArrayBindingPattern(Await: boolean): ArrayBindingPattern {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.OpenBracketToken);
+        this.expectToken(Token.OpenBracketToken);
         const elements: ArrayBindingPatternElement[] = [];
         let rest: BindingRestElement | undefined;
-        while (this.token() !== SyntaxKind.CloseBracketToken) {
+        while (this.token() !== Token.CloseBracketToken) {
             if (rest) return this.errorAtToken(`Unexpected token.`);
             switch (this.token()) {
-                case SyntaxKind.DotDotDotToken:
+                case Token.DotDotDotToken:
                     rest = this.parseBindingRestElement(Await);
                     continue;
-                case SyntaxKind.CommaToken:
-                    elements.push(this.listElement(this.parseElision(), SyntaxKind.CloseBracketToken));
+                case Token.CommaToken:
+                    elements.push(this.listElement(this.parseElision(), Token.CloseBracketToken));
                     continue;
                 default:
-                    elements.push(this.listElement(this.parseBindingElement(Await), SyntaxKind.CloseBracketToken));
+                    elements.push(this.listElement(this.parseBindingElement(Await), Token.CloseBracketToken));
                     continue;
             }
         }
-        this.expectToken(SyntaxKind.CloseBracketToken);
+        this.expectToken(Token.CloseBracketToken);
         // ArrayBindingPattern cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.ArrayBindingPattern(elements, rest), pos));
     }
 
     private parseBindingName(Await: boolean): BindingName {
         switch (this.token()) {
-            case SyntaxKind.OpenBraceToken: return this.parseObjectBindingPattern(Await);
-            case SyntaxKind.OpenBracketToken: return this.parseArrayBindingPattern(Await);
+            case Token.OpenBraceToken: return this.parseObjectBindingPattern(Await);
+            case Token.OpenBracketToken: return this.parseArrayBindingPattern(Await);
             default: return this.parseBindingIdentifier(Await);
         }
     }
 
     private parseInitializer(Await: boolean) {
         // Initializer cannot be further refined
-        return this.optionalToken(SyntaxKind.EqualsToken) ? this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await) : undefined;;
+        return this.optionalToken(Token.EqualsToken) ? this.parseAndRefineAssignmentExpressionOrHigher(/*In*/ true, Await) : undefined;;
     }
 
     private parseParameterList(Await: boolean): { parameters: ReadonlyArray<BindingElement>, rest: BindingRestElement | undefined } {
-        this.expectToken(SyntaxKind.OpenParenToken);
+        this.expectToken(Token.OpenParenToken);
         const parameters: BindingElement[] = [];
         let rest: BindingRestElement | undefined;
-        while (this.token() !== SyntaxKind.CloseParenToken) {
+        while (this.token() !== Token.CloseParenToken) {
             if (rest) return this.errorAtToken(`Unexpected token.`);
             switch (this.token()) {
-                case SyntaxKind.DotDotDotToken:
+                case Token.DotDotDotToken:
                     rest = this.parseBindingRestElement(Await);
                     continue;
                 default:
-                    parameters.push(this.listElement(this.parseBindingElement(Await), SyntaxKind.CloseParenToken));
+                    parameters.push(this.listElement(this.parseBindingElement(Await), Token.CloseParenToken));
                     continue;
             }
         }
-        this.expectToken(SyntaxKind.CloseParenToken);
+        this.expectToken(Token.CloseParenToken);
         return { parameters, rest };
     }
 
     private parseAsyncArrowFunction(In: boolean, Await: boolean) {
         const pos = this.pos();
-        this.expectToken(SyntaxKind.AsyncKeyword);
+        this.expectToken(Token.AsyncKeyword);
         const { parameters, rest } = this.parseParameterList(Await);
-        this.expectToken(SyntaxKind.EqualsGreaterThanToken);
+        this.expectToken(Token.EqualsGreaterThanToken);
         // AsyncArrowFunction cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.Arrow(true, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ true)), pos));
     }
 
     private parseArrowFunctionRest(In: boolean, head: AssignmentExpressionOrHigher) {
         const { parameters, rest } = this.refineArrowFunctionHead(head);
-        this.expectToken(SyntaxKind.EqualsGreaterThanToken);
-        if (this.token() === SyntaxKind.OpenBraceToken) return this.errorAtToken(`Expression expected.`);
+        this.expectToken(Token.EqualsGreaterThanToken);
+        if (this.token() === Token.OpenBraceToken) return this.errorAtToken(`Expression expected.`);
         // ArrowFunction cannot be further refined
         return this.finishRefine(this.finishNode(Syntax.Arrow(false, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ false)), Syntax.pos(head)));
     }
@@ -774,17 +787,17 @@ export class Parser {
     }
 
     private parseAssignmentExpressionOrHigher(In: boolean, Await: boolean): AssignmentExpressionOrHigher {
-        if (this.token() === SyntaxKind.FromKeyword) return this.parseQueryExpression(Await);
-        if (this.token() === SyntaxKind.AsyncKeyword) return this.parseAsyncArrowFunction(In, Await);
+        if (this.token() === Token.FromKeyword) return this.parseQueryExpression(Await);
+        if (this.token() === Token.AsyncKeyword) return this.parseAsyncArrowFunction(In, Await);
         const expression = this.parseBinaryExpressionOrHigher(In, Await, BinaryPrecedence.None);
-        if (this.token() === SyntaxKind.EqualsGreaterThanToken) return this.parseArrowFunctionRest(In, expression);
-        if (isLeftHandSideExpressionOrHigher(expression) && isAssignmentOperator(this.token())) {
+        if (this.token() === Token.EqualsGreaterThanToken) return this.parseArrowFunctionRest(In, expression);
+        if (isLeftHandSideExpressionOrHigher(expression) && Token.isAssignmentOperator(this.token())) {
             const pos = Syntax.pos(expression);
             // AssignmentExpression can be further refined
             return this.finishNode(
                 Syntax.Assign(
                     expression, // do not refine
-                    this.readToken(this.token() as AssignmentOperator),
+                    this.readToken(this.token() as Token.AssignmentOperator),
                     this.parseAndRefineAssignmentExpressionOrHigher(In, Await)),
                 pos);
         }
@@ -797,12 +810,12 @@ export class Parser {
 
     private parseExpression(In: boolean, Await: boolean): Expression {
         const left = this.parseAssignmentExpressionOrHigher(In, Await);
-        if (this.optionalToken(SyntaxKind.CommaToken)) {
+        if (this.optionalToken(Token.CommaToken)) {
             const expressions = [left];
             do {
                 expressions.push(this.parseAssignmentExpressionOrHigher(In, Await));
             }
-            while (this.optionalToken(SyntaxKind.CommaToken));
+            while (this.optionalToken(Token.CommaToken));
             // CommaListExpression can be further refined
             return this.finishNode(Syntax.CommaList(expressions), Syntax.pos(left));
         }
@@ -810,12 +823,12 @@ export class Parser {
     }
 
     private refineIdentifierReference(node: IdentifierName) {
-        return this.finishRefine(this.finishNode(Syntax.IdentifierReference(node.text), Syntax.pos(node), Syntax.end(node)));
+        return this.finishRefine(this.finishNode(Syntax.Identifier(node.text), Syntax.pos(node), Syntax.end(node)));
     }
 
     private refineBindingIdentifier(node: IdentifierName | Expression) {
-        if (node.kind === SyntaxKind.IdentifierName || node.kind === SyntaxKind.IdentifierReference) {
-            return this.finishRefine(this.finishNode(Syntax.BindingIdentifier(node.text), Syntax.pos(node), Syntax.end(node)));
+        if (node.kind === SyntaxKind.Identifier) {
+            return this.finishRefine(node);
         }
         return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
     }
@@ -1007,7 +1020,7 @@ export class Parser {
     }
 
     // private refineIdentifier(node: AssignmentExpressionOrHigher): Identifier {
-    //     if (node.kind !== SyntaxKind.Identifier) return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
+    //     if (node.kind !== TokenKind.Identifier) return this.errorAtPos(`Unexpected token.`, Syntax.pos(node));
     //     return node;
     // }
 
@@ -1133,7 +1146,7 @@ export class Parser {
 
     private refineBindingName(node: AssignmentExpressionOrHigher | BindingName): BindingName {
         switch (node.kind) {
-            case SyntaxKind.IdentifierReference: return this.refineBindingIdentifier(node);
+            case SyntaxKind.Identifier: return this.refineBindingIdentifier(node);
             case SyntaxKind.ObjectLiteral: return this.refineObjectBindingPattern(node);
             case SyntaxKind.ArrayLiteral: return this.refineArrayBindingPattern(node);
             case SyntaxKind.ObjectBindingPattern: return this.refineObjectBindingPattern(node);
@@ -1158,7 +1171,7 @@ export class Parser {
             }
             rest = head.rest;
         }
-        else if (head.kind === SyntaxKind.IdentifierReference) {
+        else if (head.kind === SyntaxKind.Identifier) {
             parameters.push(this.finishNode(Syntax.Param(this.refineBindingIdentifier(head)), Syntax.pos(head), Syntax.end(head)));
         }
         else {
@@ -1177,15 +1190,15 @@ export class Parser {
     }
 }
 
-function isStartOfClause(token: SyntaxKind) {
+function isStartOfClause(token: Token) {
     switch (token) {
-        case SyntaxKind.FromKeyword:
-        case SyntaxKind.LetKeyword:
-        case SyntaxKind.WhereKeyword:
-        case SyntaxKind.OrderbyKeyword:
-        case SyntaxKind.GroupKeyword:
-        case SyntaxKind.JoinKeyword:
-        case SyntaxKind.SelectKeyword:
+        case Token.FromKeyword:
+        case Token.LetKeyword:
+        case Token.WhereKeyword:
+        case Token.OrderbyKeyword:
+        case Token.GroupKeyword:
+        case Token.JoinKeyword:
+        case Token.SelectKeyword:
             return true;
         default:
             return false;
@@ -1201,27 +1214,27 @@ function createCoverInitializedName(name: IdentifierReference, initializer: Assi
 }
 
 interface SimpleAssignmentExpression extends AssignmentExpression {
-    operator: SyntaxKind.EqualsToken;
+    operator: Token.EqualsToken;
 }
 
 interface CompoundAssignmentExpression extends AssignmentExpression {
-    operator: Exclude<AssignmentOperator, SyntaxKind.EqualsToken>;
+    operator: Exclude<Token.AssignmentOperator, Token.EqualsToken>;
 }
 
 function isSimpleAssignment(node: Node): node is SimpleAssignmentExpression {
     return node.kind === SyntaxKind.AssignmentExpression
-        && node.operator === SyntaxKind.EqualsToken;
+        && node.operator === Token.EqualsToken;
 }
 
 function isCompoundAssignment(node: Node): node is CompoundAssignmentExpression {
     return node.kind === SyntaxKind.AssignmentExpression
-        && node.operator !== SyntaxKind.EqualsToken;
+        && node.operator !== Token.EqualsToken;
 }
 
-function mayBeIdentifier(token: SyntaxKind, allowReservedWords: boolean, allowAwait: boolean) {
-    if (token === SyntaxKind.Identifier) return true;
-    if (token === SyntaxKind.AwaitKeyword) return allowAwait || allowReservedWords;
-    if (isECMAScriptReservedWord(token)) return allowReservedWords;
-    if (isKeyword(token)) return true;
+function mayBeIdentifier(token: Token, allowReservedWords: boolean, allowAwait: boolean) {
+    if (token === Token.Identifier) return true;
+    if (token === Token.AwaitKeyword) return allowAwait || allowReservedWords;
+    if (Token.isECMAScriptReservedWord(token)) return allowReservedWords;
+    if (Token.isKeyword(token)) return true;
     return false;
 }

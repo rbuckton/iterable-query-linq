@@ -1,4 +1,4 @@
-import { SyntaxKind } from "./types";
+import { Token } from "./tokens";
 
 export const enum BinaryPrecedence {
     Unknown = -1,
@@ -16,32 +16,32 @@ export const enum BinaryPrecedence {
     ExponentiationExpression
 }
 
-export function getBinaryOperatorPrecedence(kind: SyntaxKind): BinaryPrecedence {
+export function getBinaryOperatorPrecedence(kind: Token): BinaryPrecedence {
     switch (kind) {
-        case SyntaxKind.BarBarToken: return BinaryPrecedence.LogicalORExpression;
-        case SyntaxKind.AmpersandAmpersandToken: return BinaryPrecedence.LogicalANDExpression;
-        case SyntaxKind.BarToken: return BinaryPrecedence.BitwiseORExpression;
-        case SyntaxKind.CaretToken: return BinaryPrecedence.BitwiseXORExpression;
-        case SyntaxKind.AmpersandToken: return BinaryPrecedence.BitwiseANDExpression;
-        case SyntaxKind.EqualsEqualsToken:
-        case SyntaxKind.EqualsEqualsEqualsToken:
-        case SyntaxKind.ExclamationEqualsToken:
-        case SyntaxKind.ExclamationEqualsEqualsToken: return BinaryPrecedence.EqualityExpression;
-        case SyntaxKind.LessThanToken:
-        case SyntaxKind.LessThanEqualsToken:
-        case SyntaxKind.GreaterThanToken:
-        case SyntaxKind.GreaterThanEqualsToken:
-        case SyntaxKind.InstanceofKeyword:
-        case SyntaxKind.InKeyword: return BinaryPrecedence.RelationalExpression;
-        case SyntaxKind.LessThanLessThanToken:
-        case SyntaxKind.GreaterThanGreaterThanToken:
-        case SyntaxKind.GreaterThanGreaterThanGreaterThanToken: return BinaryPrecedence.ShiftExpression;
-        case SyntaxKind.PlusToken:
-        case SyntaxKind.MinusToken: return BinaryPrecedence.AdditiveExpression;
-        case SyntaxKind.AsteriskToken:
-        case SyntaxKind.SlashToken:
-        case SyntaxKind.PercentToken: return BinaryPrecedence.MultiplicitaveExpression;
-        case SyntaxKind.AsteriskAsteriskToken: return BinaryPrecedence.ExponentiationExpression;
+        case Token.BarBarToken: return BinaryPrecedence.LogicalORExpression;
+        case Token.AmpersandAmpersandToken: return BinaryPrecedence.LogicalANDExpression;
+        case Token.BarToken: return BinaryPrecedence.BitwiseORExpression;
+        case Token.CaretToken: return BinaryPrecedence.BitwiseXORExpression;
+        case Token.AmpersandToken: return BinaryPrecedence.BitwiseANDExpression;
+        case Token.EqualsEqualsToken:
+        case Token.EqualsEqualsEqualsToken:
+        case Token.ExclamationEqualsToken:
+        case Token.ExclamationEqualsEqualsToken: return BinaryPrecedence.EqualityExpression;
+        case Token.LessThanToken:
+        case Token.LessThanEqualsToken:
+        case Token.GreaterThanToken:
+        case Token.GreaterThanEqualsToken:
+        case Token.InstanceofKeyword:
+        case Token.InKeyword: return BinaryPrecedence.RelationalExpression;
+        case Token.LessThanLessThanToken:
+        case Token.GreaterThanGreaterThanToken:
+        case Token.GreaterThanGreaterThanGreaterThanToken: return BinaryPrecedence.ShiftExpression;
+        case Token.PlusToken:
+        case Token.MinusToken: return BinaryPrecedence.AdditiveExpression;
+        case Token.AsteriskToken:
+        case Token.SlashToken:
+        case Token.PercentToken: return BinaryPrecedence.MultiplicitaveExpression;
+        case Token.AsteriskAsteriskToken: return BinaryPrecedence.ExponentiationExpression;
         default: return BinaryPrecedence.Unknown;
     }
 }

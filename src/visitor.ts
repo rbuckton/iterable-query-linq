@@ -18,8 +18,8 @@ import {
     ShorthandBindingProperty, AssignmentRestProperty, AssignmentProperty,
     ShorthandAssignmentProperty, ArrayBindingPattern, BindingElement, BindingRestElement,
     AssignmentElement, AssignmentRestElement, SequenceBinding, IdentifierReference, 
-    isAssignmentExpressionOrHigher, isLeftHandSideExpressionOrHigher, Node,
-} from "./types";
+    isAssignmentExpressionOrHigher, isLeftHandSideExpressionOrHigher, Node, Statement, Block, LetStatement, ExpressionStatement, ReturnStatement,
+} from "./syntax";
 import { assertFail, assertNever, visitList } from "./utils";
 
 export abstract class ExpressionVisitor {
@@ -31,7 +31,10 @@ export abstract class ExpressionVisitor {
         return visitList(list, visitor, thisArgument);
     }
 
-    visit(node: Expression): Expression {
+    visit(node: Expression): Expression;
+    visit(node: Statement): Statement;
+    visit(node: Statement | Expression): Statement | Expression;
+    visit(node: Statement | Expression): Statement | Expression {
         switch (node.kind) {
             // Literals
             case SyntaxKind.StringLiteral: return this.visitStringLiteral(node);
@@ -41,7 +44,7 @@ export abstract class ExpressionVisitor {
             case SyntaxKind.BooleanLiteral: return this.visitBooleanLiteral(node);
 
             // Expressions
-            case SyntaxKind.IdentifierReference: return this.visitIdentifierReference(node);
+            case SyntaxKind.Identifier: return this.visitIdentifierReference(node);
             case SyntaxKind.ThisExpression: return this.visitThisExpression(node);
             case SyntaxKind.ArrowFunction: return this.visitArrowFunction(node);
             case SyntaxKind.PrefixUnaryExpression: return this.visitPrefixUnaryExpression(node);
@@ -62,6 +65,11 @@ export abstract class ExpressionVisitor {
             // Patterns
             case SyntaxKind.ObjectAssignmentPattern: return this.visitObjectAssignmentPattern(node);
             case SyntaxKind.ArrayAssignmentPattern: return this.visitArrayAssignmentPattern(node);
+
+            case SyntaxKind.Block: return this.visitBlock(node);
+            case SyntaxKind.LetStatement: return this.visitLetStatement(node);
+            case SyntaxKind.ExpressionStatement: return this.visitExpressionStatement(node);
+            case SyntaxKind.ReturnStatement: return this.visitReturnStatement(node);
 
             // Cover Grammars
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
@@ -112,7 +120,7 @@ export abstract class ExpressionVisitor {
     protected visitLetClause(node: LetClause): LetClause {
         return SyntaxUpdate.LetClause(node,
             this.visitQueryBodyClause(node.outerClause),
-            node.name,
+            this.visitBindingName(node.name),
             this.visit(node.expression));
     }
 
@@ -139,7 +147,7 @@ export abstract class ExpressionVisitor {
             this.visitQueryBodyClause(node.outerClause),
             this.visit(node.elementSelector),
             this.visit(node.keySelector),
-            node.into);
+            node.into && this.visitBindingName(node.into));
     }
 
     protected visitJoinClause(node: JoinClause): JoinClause {
@@ -148,14 +156,14 @@ export abstract class ExpressionVisitor {
             this.visitSequenceBinding(node.sequenceBinding),
             this.visit(node.outerKeySelector),
             this.visit(node.keySelector),
-            node.into);
+            node.into && this.visitBindingName(node.into));
     }
 
     protected visitSelectClause(node: SelectClause): SelectClause {
         return SyntaxUpdate.SelectClause(node,
             this.visitQueryBodyClause(node.outerClause),
             this.visit(node.expression),
-            node.into);
+            node.into && this.visitBindingName(node.into));
     }
 
     // Expressions - PrimaryExpression
@@ -335,7 +343,7 @@ export abstract class ExpressionVisitor {
     // Expressions - Expression
 
     protected visitCommaListExpression(node: CommaListExpression): Expression {
-        return SyntaxUpdate.Comma(node, visitList(node.expressions, this.visit, this));
+        return SyntaxUpdate.Comma(node, visitList<Expression, Expression, this>(node.expressions, this.visit, this));
     }
 
     // Elements
@@ -352,7 +360,7 @@ export abstract class ExpressionVisitor {
 
     protected visitPropertyName(node: PropertyName): PropertyName {
         switch (node.kind) {
-            case SyntaxKind.IdentifierName: return node;
+            case SyntaxKind.Identifier: return node;
             case SyntaxKind.StringLiteral: return node;
             case SyntaxKind.NumberLiteral: return node;
             case SyntaxKind.ComputedPropertyName: return this.visitComputedPropertyName(node);
@@ -434,7 +442,7 @@ export abstract class ExpressionVisitor {
 
     protected visitBindingName(node: BindingName): BindingName {
         switch (node.kind) {
-            case SyntaxKind.BindingIdentifier: return node;
+            case SyntaxKind.Identifier: return node;
             case SyntaxKind.ObjectBindingPattern: return this.visitObjectBindingPattern(node);
             case SyntaxKind.ArrayBindingPattern: return this.visitArrayBindingPattern(node);
             default: return assertNever(node);
@@ -460,5 +468,23 @@ export abstract class ExpressionVisitor {
         const target = this.visit(node.target);
         if (!isAssignmentExpressionOrHigher(target)) throw new Error("Invalid assignment target");
         return SyntaxUpdate.AssignmentRestElement(node, target);
+    }
+
+    // Statements
+
+    protected visitBlock(node: Block): Statement {
+        return SyntaxUpdate.Block(node, visitList(node.statements, this.visit, this));
+    }
+
+    protected visitLetStatement(node: LetStatement): Statement {
+        return SyntaxUpdate.Let(node, visitList(node.variables, this.visitBindingElement, this));
+    }
+
+    protected visitExpressionStatement(node: ExpressionStatement): Statement {
+        return SyntaxUpdate.ExpressionStatement(node, this.visit(node.expression));
+    }
+
+    protected visitReturnStatement(node: ReturnStatement): Statement {
+        return SyntaxUpdate.Return(node, node.expression && this.visit(node.expression));
     }
 }

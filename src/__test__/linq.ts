@@ -31,6 +31,13 @@ describe("linq", () => {
             `;
             expectSequence(q, [1, 2, 3]);
         });
+        it("`from` BindingPattern `in` AssignmentExpression", () => {
+            const q = linq`
+                from { x } in ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
+                select x
+            `;
+            expectSequence(q, [1, 2, 3]);
+        });
         it("`from` BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression", () => {
             const q = linq`
                 from x in ${nodes.nodes} with hierarchy ${nodes.nodeHierarchy}
@@ -86,6 +93,14 @@ describe("linq", () => {
         it("Clause `let` BindingIdentifier `=` AssignmentExpression", () => {
             const q = linq`
                 from x in [1, 2, 3]
+                let y = x + 1
+                select y
+            `;
+            expectSequence(q, [2, 3, 4]);
+        });
+        it("Clause `let` BindingName `=` AssignmentExpression", () => {
+            const q = linq`
+                from { x } in ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
                 let y = x + 1
                 select y
             `;
@@ -185,6 +200,17 @@ describe("linq", () => {
                 { role: "user", names: ["bob", "dave"] }
             ]);
         });
+        it("[+Into] Clause `group` AssignmentExpression `by` AssignmentExpression `into` BindingPattern", () => {
+            const q = linq`
+                from u in ${users.users}
+                group u.name by u.role into { key, values: [name, ...names] }
+                select { role: key, first: name, rest: [...names] }
+            `;
+            expectSequence(q, [
+                { role: "admin", first: "alice", rest: [] },
+                { role: "user", first: "bob", rest: ["dave"] }
+            ]);
+        });
     });
 
     describe("JoinClause[Into] :", () => {
@@ -242,6 +268,18 @@ describe("linq", () => {
                 { role: users.adminRole, users: [users.aliceUser] },
                 { role: users.userRole, users: [users.bobUser, users.daveUser] },
                 { role: users.guestRole, users: [] }
+            ]);
+        });
+        it("[+Into] Clause `join` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingPattern", () => {
+            const q = linq`
+                from role in ${users.roles}
+                join user in ${users.users} on role.name equals user.role into [user, ...users]
+                select { role, first: user, rest: [...users] }
+            `;
+            expectSequence(q, [
+                { role: users.adminRole, first: users.aliceUser, rest: [] },
+                { role: users.userRole, first: users.bobUser, rest: [users.daveUser] },
+                { role: users.guestRole, first: undefined, rest: [] }
             ]);
         });
         it("Clause `join` `await` BindingIdentifier `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
@@ -314,6 +352,14 @@ describe("linq", () => {
             const q = linq`
                 from x in ${[1, 2, 3]}
                 select x + 1 into y
+                select y
+            `;
+            expectSequence(q, [2, 3, 4]);
+        });
+        it("[+Into] Clause `select` AssignmentExpression `into` BindingPattern", () => {
+            const q = linq`
+                from x in ${[1, 2, 3]}
+                select { y: x + 1 } into { y }
                 select y
             `;
             expectSequence(q, [2, 3, 4]);

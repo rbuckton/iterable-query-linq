@@ -5,7 +5,7 @@
   "main": "dist",
   "typings": "dist",
   "dependencies": {
-    "iterable-query": "^1.0.0-pre.5"
+    "iterable-query": "^1.0.0-pre.6"
   },
   "devDependencies": {
     "@types/chai": "^4.1.4",

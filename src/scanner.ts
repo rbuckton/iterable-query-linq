@@ -1,4 +1,4 @@
-import { SyntaxKind, TokenFlags, Token } from "./types";
+import { Token, TokenFlags } from "./tokens";
 import { RecoverableSyntaxError } from "./errors";
 
 const keywordPattern = String.raw`\b(?:a(?:ncestors(?:orself)?of|s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|hildrenof|lass|on(?:st|tinue))|d(?:e(?:bugger|fault|lete|scend(?:ants(?:orself)?of|ing))|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|hierarchy|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:a(?:rentof|ckage)|r(?:ivate|otected)|ublic)|r(?:eturn|ootof)|s(?:el(?:ect|fof)|iblings(?:orself)?of|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
@@ -26,147 +26,6 @@ const tokensRegExp = new RegExp(tokensPattern, "g");
 const regExpRegExp = /\/((?:[^\/]|\\\/)+(\/[a-zA-Z]*)?)?/g;
 const stringRegExp = /'(?:[^']|\\')+'|"(?:[^"]|\\")+"/;
 
-const stringToTokenMap: Record<string, Token> = {
-    "ancestorsof": SyntaxKind.AncestorsofKeyword,
-    "ancestorsorselfof": SyntaxKind.AncestorsorselfofKeyword,
-    "ascending": SyntaxKind.AscendingKeyword,
-    "async": SyntaxKind.AsyncKeyword,
-    "await": SyntaxKind.AwaitKeyword,
-    "break": SyntaxKind.BreakKeyword,
-    "by": SyntaxKind.ByKeyword,
-    "case": SyntaxKind.CaseKeyword,
-    "catch": SyntaxKind.CatchKeyword,
-    "childrenof": SyntaxKind.ChildrenofKeyword,
-    "class": SyntaxKind.ClassKeyword,
-    "const": SyntaxKind.ConstKeyword,
-    "continue": SyntaxKind.ContinueKeyword,
-    "debugger": SyntaxKind.DebuggerKeyword,
-    "default": SyntaxKind.DefaultKeyword,
-    "delete": SyntaxKind.DeleteKeyword,
-    "descendantsof": SyntaxKind.DescendantsofKeyword,
-    "descendantsorselfof": SyntaxKind.DescendantsorselfofKeyword,
-    "descending": SyntaxKind.DescendingKeyword,
-    "do": SyntaxKind.DoKeyword,
-    "else": SyntaxKind.ElseKeyword,
-    "enum": SyntaxKind.EnumKeyword,
-    "equals": SyntaxKind.EqualsKeyword,
-    "export": SyntaxKind.ExportKeyword,
-    "extends": SyntaxKind.ExtendsKeyword,
-    "false": SyntaxKind.FalseKeyword,
-    "finally": SyntaxKind.FinallyKeyword,
-    "for": SyntaxKind.ForKeyword,
-    "from": SyntaxKind.FromKeyword,
-    "function": SyntaxKind.FunctionKeyword,
-    "group": SyntaxKind.GroupKeyword,
-    "hierarchy": SyntaxKind.HierarchyKeyword,
-    "if": SyntaxKind.IfKeyword,
-    "implements": SyntaxKind.ImplementsKeyword,
-    "import": SyntaxKind.ImportKeyword,
-    "in": SyntaxKind.InKeyword,
-    "instanceof": SyntaxKind.InstanceofKeyword,
-    "interface": SyntaxKind.InterfaceKeyword,
-    "into": SyntaxKind.IntoKeyword,
-    "join": SyntaxKind.JoinKeyword,
-    "let": SyntaxKind.LetKeyword,
-    "new": SyntaxKind.NewKeyword,
-    "null": SyntaxKind.NullKeyword,
-    "of": SyntaxKind.OfKeyword,
-    "on": SyntaxKind.OnKeyword,
-    "orderby": SyntaxKind.OrderbyKeyword,
-    "package": SyntaxKind.PackageKeyword,
-    "parentof": SyntaxKind.ParentofKeyword,
-    "private": SyntaxKind.PrivateKeyword,
-    "protected": SyntaxKind.ProtectedKeyword,
-    "public": SyntaxKind.PublicKeyword,
-    "return": SyntaxKind.ReturnKeyword,
-    "rootof": SyntaxKind.RootofKeyword,
-    "select": SyntaxKind.SelectKeyword,
-    "selfof": SyntaxKind.SelfofKeyword,
-    "siblingsof": SyntaxKind.SiblingsofKeyword,
-    "siblingsorselfof": SyntaxKind.SiblingsorselfofKeyword,
-    "static": SyntaxKind.StaticKeyword,
-    "super": SyntaxKind.SuperKeyword,
-    "switch": SyntaxKind.SwitchKeyword,
-    "this": SyntaxKind.ThisKeyword,
-    "throw": SyntaxKind.ThrowKeyword,
-    "true": SyntaxKind.TrueKeyword,
-    "try": SyntaxKind.TryKeyword,
-    "typeof": SyntaxKind.TypeofKeyword,
-    "using": SyntaxKind.UsingKeyword,
-    "var": SyntaxKind.VarKeyword,
-    "void": SyntaxKind.VoidKeyword,
-    "where": SyntaxKind.WhereKeyword,
-    "while": SyntaxKind.WhileKeyword,
-    "with": SyntaxKind.WithKeyword,
-    "yield": SyntaxKind.YieldKeyword,
-    "{": SyntaxKind.OpenBraceToken,
-    "}": SyntaxKind.CloseBraceToken,
-    "(": SyntaxKind.OpenParenToken,
-    ")": SyntaxKind.CloseParenToken,
-    "[": SyntaxKind.OpenBracketToken,
-    "]": SyntaxKind.CloseBracketToken,
-    ".": SyntaxKind.DotToken,
-    "...": SyntaxKind.DotDotDotToken,
-    ",": SyntaxKind.CommaToken,
-    "<": SyntaxKind.LessThanToken,
-    "<=": SyntaxKind.LessThanEqualsToken,
-    "<<": SyntaxKind.LessThanLessThanToken,
-    "<<=": SyntaxKind.LessThanLessThanEqualsToken,
-    ">": SyntaxKind.GreaterThanToken,
-    ">=": SyntaxKind.GreaterThanEqualsToken,
-    ">>": SyntaxKind.GreaterThanGreaterThanToken,
-    ">>=": SyntaxKind.GreaterThanGreaterThanEqualsToken,
-    ">>>": SyntaxKind.GreaterThanGreaterThanGreaterThanToken,
-    ">>>=": SyntaxKind.GreaterThanGreaterThanGreaterThanEqualsToken,
-    "=": SyntaxKind.EqualsToken,
-    "==": SyntaxKind.EqualsEqualsToken,
-    "===": SyntaxKind.EqualsEqualsEqualsToken,
-    "=>": SyntaxKind.EqualsGreaterThanToken,
-    "!": SyntaxKind.ExclamationToken,
-    "!=": SyntaxKind.ExclamationEqualsToken,
-    "!==": SyntaxKind.ExclamationEqualsEqualsToken,
-    "+": SyntaxKind.PlusToken,
-    "+=": SyntaxKind.PlusEqualsToken,
-    "++": SyntaxKind.PlusPlusToken,
-    "-": SyntaxKind.MinusToken,
-    "-=": SyntaxKind.MinusEqualsToken,
-    "--": SyntaxKind.MinusMinusToken,
-    "*": SyntaxKind.AsteriskToken,
-    "*=": SyntaxKind.AsteriskEqualsToken,
-    "**": SyntaxKind.AsteriskAsteriskToken,
-    "**=": SyntaxKind.AsteriskAsteriskEqualsToken,
-    "/": SyntaxKind.SlashToken,
-    "/=": SyntaxKind.SlashEqualsToken,
-    "%": SyntaxKind.PercentToken,
-    "%=": SyntaxKind.PercentEqualsToken,
-    "&": SyntaxKind.AmpersandToken,
-    "&=": SyntaxKind.AmpersandEqualsToken,
-    "&&": SyntaxKind.AmpersandAmpersandToken,
-    "|": SyntaxKind.BarToken,
-    "|=": SyntaxKind.BarEqualsToken,
-    "||": SyntaxKind.BarBarToken,
-    "^": SyntaxKind.CaretToken,
-    "^=": SyntaxKind.CaretEqualsToken,
-    "~": SyntaxKind.TildeToken,
-    "?": SyntaxKind.QuestionToken,
-    ":": SyntaxKind.ColonToken,
-};
-
-const tokenToStringMap: string[] = [];
-for (const token in stringToTokenMap) {
-    tokenToStringMap[stringToTokenMap[token]] = token;
-}
-
-/** @internal */
-export function stringToToken(text: string): Token | undefined {
-    return stringToTokenMap[text];
-}
-
-/** @internal */
-export function tokenToString(kind: Token) {
-    return tokenToStringMap[kind];
-}
-
 /** @internal */
 export class Scanner {
     private _text: string;
@@ -174,7 +33,7 @@ export class Scanner {
     private _regExpTokenizer: RegExp;
     private _pos = 0;
     private _startPos = 0;
-    private _token = SyntaxKind.Unknown;
+    private _token = Token.Unknown;
     private _tokenPos = 0;
     private _tokenFlags = TokenFlags.None;
 
@@ -194,7 +53,7 @@ export class Scanner {
     setTextPos(pos: number) {
         this._pos = pos;
         this._startPos = 0;
-        this._token = SyntaxKind.Unknown;
+        this._token = Token.Unknown;
         this._tokenPos = 0;
         this._tokenFlags = TokenFlags.None;
     }
@@ -202,7 +61,7 @@ export class Scanner {
     reset() {
         this._pos = 0;
         this._startPos = 0;
-        this._token = SyntaxKind.Unknown;
+        this._token = Token.Unknown;
         this._tokenPos = 0;
         this._tokenFlags = TokenFlags.None;
         this._tokenizer.lastIndex = 0;
@@ -213,13 +72,13 @@ export class Scanner {
         this._tokenFlags = TokenFlags.None;
         while (true) {
             this._tokenPos = this._pos;
-            if (this._pos >= this._text.length) return this._token = SyntaxKind.EndOfFileToken;
+            if (this._pos >= this._text.length) return this._token = Token.EndOfFileToken;
             this._tokenizer.lastIndex = this._pos;
             const match = this._tokenizer.exec(this._text)!;
             this._pos = this._tokenizer.lastIndex === -1 ? this._text.length : this._tokenizer.lastIndex;
             if (match[whitespaceIndex]) continue;
-            if (match[keywordIndex]) return this._token = stringToTokenMap[match[keywordIndex]];
-            if (match[operatorIndex]) return this._token = stringToTokenMap[match[operatorIndex]];
+            if (match[keywordIndex]) return this._token = Token.stringToToken(match[keywordIndex]);
+            if (match[operatorIndex]) return this._token = Token.stringToToken(match[operatorIndex]);
             if (match[stringIndex]) {
                 if (!stringRegExp.test(match[stringIndex])) {
                     throw new RecoverableSyntaxError(`Unterminated string literal.`, {
@@ -228,13 +87,13 @@ export class Scanner {
                         end: this._pos
                     });
                 }
-                return this._token = SyntaxKind.StringLiteral;
+                return this._token = Token.StringLiteral;
             }
-            if (match[decimalDigitsIndex]) return this._token = SyntaxKind.NumberLiteral;
-            if (match[hexDigitsIndex]) return this._tokenFlags |= TokenFlags.Hexadecimal, this._token = SyntaxKind.NumberLiteral;
-            if (match[octalDigitsIndex]) return this._tokenFlags |= TokenFlags.Octal, this._token = SyntaxKind.NumberLiteral;
-            if (match[binaryDigitsIndex]) return this._tokenFlags |= TokenFlags.Binary, this._token = SyntaxKind.NumberLiteral;
-            if (match[identifierIndex]) return this._token = SyntaxKind.Identifier;
+            if (match[decimalDigitsIndex]) return this._token = Token.NumberLiteral;
+            if (match[hexDigitsIndex]) return this._tokenFlags |= TokenFlags.Hexadecimal, this._token = Token.NumberLiteral;
+            if (match[octalDigitsIndex]) return this._tokenFlags |= TokenFlags.Octal, this._token = Token.NumberLiteral;
+            if (match[binaryDigitsIndex]) return this._tokenFlags |= TokenFlags.Binary, this._token = Token.NumberLiteral;
+            if (match[identifierIndex]) return this._token = Token.Identifier;
             throw new RecoverableSyntaxError(`Unrecognized token '${match[unrecognizedIndex]}'`, {
                 text: this._text,
                 pos: this._tokenPos,
@@ -265,8 +124,8 @@ export class Scanner {
         return result;
     }
 
-    rescanSlash(): SyntaxKind {
-        if (this._token === SyntaxKind.SlashToken || this._token === SyntaxKind.SlashEqualsToken) {
+    rescanSlash(): Token {
+        if (this._token === Token.SlashToken || this._token === Token.SlashEqualsToken) {
             this._regExpTokenizer.lastIndex = this._tokenPos;
             const match = this._regExpTokenizer.exec(this._text);
             if (match && match[1]) {
@@ -278,7 +137,7 @@ export class Scanner {
                         end: this._pos
                     });
             }
-                return this._token = SyntaxKind.RegularExpressionLiteral;
+                return this._token = Token.RegularExpressionLiteral;
             }
         }
         return this._token;

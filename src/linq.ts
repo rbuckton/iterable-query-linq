@@ -4,7 +4,7 @@ import { Parser } from "./parser";
 import { Transformer } from "./transformer";
 import { Emitter } from "./emitter";
 import { Query, AsyncQuery, from, fromAsync } from "iterable-query";
-import { Expression } from "./types";
+import { Expression } from "./syntax";
 import { isIdentifierPart } from "./scanner";
 
 export function linq<T = any>(array: TemplateStringsArray, ...args: any[]): Query<T> {
