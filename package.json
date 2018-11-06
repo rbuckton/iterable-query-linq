@@ -1,11 +1,11 @@
 {
   "name": "iterable-query-linq",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "description": "LINQ-like syntax using tagged templates.",
   "main": "dist",
   "typings": "dist",
   "dependencies": {
-    "iterable-query": "^1.0.0-pre.6"
+    "iterable-query": "^1.0.0-pre.7"
   },
   "devDependencies": {
     "@types/chai": "^4.1.4",

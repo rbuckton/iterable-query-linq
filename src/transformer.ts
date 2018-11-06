@@ -45,8 +45,8 @@ class UnboundQuery {
         return new UnboundQuery(expression, this.async);
     }
 
-    selectMany(projection: ArrowFunction, resultSelector?: ArrowFunction): UnboundQuery {
-        const expression = callQueryMethod(this.expression, "selectMany", resultSelector ? [projection, resultSelector] : [projection]);
+    selectMany(projection: ArrowFunction, resultSelector: ArrowFunction): UnboundQuery {
+        const expression = callQueryMethod(this.expression, "selectMany", [projection, resultSelector]);
         return new UnboundQuery(expression, this.async);
     }
 
@@ -106,7 +106,7 @@ class BoundQuery extends UnboundQuery {
         const q = !this.async && inner.async ? this.toAsyncQuery() : this;
         return q
             .selectMany(
-                Syntax.Arrow(false, [], undefined, inner.expression),
+                Syntax.Arrow(false, [getBindingsParameter(this.bindings)], undefined, inner.expression),
                 Syntax.Arrow(false, [getBindingsParameter(this.bindings), getBindingsParameter(inner.bindings)], undefined, getBindingsExpression([...this.bindings, ...inner.bindings]))
             )
             .setBindings([...this.bindings, ...inner.bindings]);

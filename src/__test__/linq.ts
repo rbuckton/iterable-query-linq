@@ -22,6 +22,31 @@ describe("linq", () => {
         `;
         expect(q.toArray()).to.deep.equal([3, 2, 1]);
     });
+    it("cross join", () => {
+        const q = linq`
+            from x in [1, 2]
+            from s in ["a", "b"]
+            select { x, s }
+        `;
+        expectSequence(q, [{ x: 1, s: "a" }, { x: 1, s: "b" }, { x: 2, s: "a" }, { x: 2, s: "b" }]);
+    });
+    it("select many", () => {
+        const q = linq`
+            from x in [[1, 2], ["a", "b"]]
+            from y in x
+            select { x, y }
+        `;
+        expectSequence(q, [{ x: [1, 2], y: 1 }, { x: [1, 2], y: 2 }, { x: ["a", "b"], y: "a" }, { x: ["a", "b"], y: "b" }]);
+    });
+    it("flatten group", () => {
+        const q = linq`
+            from x in [{ a: 1, b: 2 }, { a: 1, b: 3 }]
+            group x by x.a into g
+            from x in g
+            select { k: g.key, b: x.b }
+        `;
+        expectSequence(q, [{ k: 1, b: 2 }, { k: 1, b: 3 }]);
+    });
 
     describe("FromClause :", () => {
         it("`from` BindingIdentifier `in` AssignmentExpression", () => {
