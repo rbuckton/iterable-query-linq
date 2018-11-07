@@ -1,10 +1,9 @@
 import * as fs from "fs";
 import { start, Recoverable, ReplOptions } from "repl";
+import { Query, AsyncQuery } from "iterable-query";
+import { EOL } from "os";
 import { parseAndExecuteAsyncQuery, parseAndExecuteQuery } from "./linq";
 import { RecoverableSyntaxError } from "./errors";
-import { toArrayAsync, takeAsync, take, toArray } from "iterable-query/fn";
-import { fromAsync, from, Query, AsyncQuery } from "iterable-query";
-import { EOL } from "os";
 
 export interface LinqReplOptions {
     prompt?: string;
@@ -14,22 +13,19 @@ export interface LinqReplOptions {
     useColors?: boolean;
     limit?: number;
     async?: boolean;
+}
+
+export interface SyncLinqReplOptions {
+    async?: false;
     writer?: (value: Query<any>) => any;
 }
 
 export interface AsyncLinqReplOptions {
-    prompt?: string;
-    input?: NodeJS.ReadableStream;
-    output?: NodeJS.WritableStream;
-    terminal?: boolean;
-    useColors?: boolean;
-    limit?: number;
     async: true;
     writer?: (value: AsyncQuery<any>) => any;
 }
 
-
-export function startLinqRepl(context: Record<string, any>, options: LinqReplOptions | AsyncLinqReplOptions = {}) {
+export function startLinqRepl(context: Record<string, any>, options: LinqReplOptions & (SyncLinqReplOptions | AsyncLinqReplOptions) = {}) {
     options = { ...options };
     let { limit, async = false } = options;
     const replOptions: ReplOptions = {
@@ -43,8 +39,7 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
         eval: onEval
     };
     const repl = start(replOptions);
-    repl.defineCommand("top", { help: "Sets the limit to the number of results returned", action: onTop });
-    repl.defineCommand("limit", { help: "Sets the limit to the number of results returned", action: onTop });
+    repl.defineCommand("limit", { help: "Sets the limit to the number of results returned", action: onLimit });
     repl.defineCommand("exec", { help: "Loads the specified file and executes the query", action: onExec });
     repl.on("reset", resetContext);
     resetContext(repl.context);
@@ -78,7 +73,7 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
         }
     }
 
-    function onTop(text: string) {
+    function onLimit(text: string) {
         (repl as any).clearBufferedCommand();
         if (text) {
             const count = parseInt(text);
@@ -99,14 +94,14 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
         }
         try {
             if (async) {
-                let result: AsyncIterable<any> = parseAndExecuteAsyncQuery(code, context);
-                if (limit) result = takeAsync(result, limit);
-                return replOptions.writer ? fromAsync(result) : await toArrayAsync(result);
+                let result = parseAndExecuteAsyncQuery(code, context);
+                if (limit) result = result.take(limit);
+                return replOptions.writer ? result : await result.toArray();
             }
             else {
-                let result: Iterable<any> = parseAndExecuteQuery(code, context);
-                if (limit) result = take(result, limit);
-                return replOptions.writer ? from(result) : toArray(result);
+                let result = parseAndExecuteQuery(code, context);
+                if (limit) result = result.take(limit);
+                return replOptions.writer ? result : result.toArray();
             }
         }
         catch (e) {
