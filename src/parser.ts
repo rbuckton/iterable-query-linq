@@ -408,7 +408,9 @@ export class Parser {
         switch (this.token()) {
             case Token.CommaToken: return this.parseElision();
             case Token.DotDotDotToken: return this.parseSpreadElement(Await);
-            default: return this.parseAssignmentExpressionOrHigher(/*In*/ true, Await);
+            default:
+                // ArrayLiteralElement can be further refined.
+                return this.parseAssignmentExpressionOrHigher(/*In*/ true, Await);
         }
     }
 
@@ -771,7 +773,7 @@ export class Parser {
         const { parameters, rest } = this.parseParameterList(Await);
         this.expectToken(Token.EqualsGreaterThanToken);
         // AsyncArrowFunction cannot be further refined
-        return this.finishRefine(this.finishNode(Syntax.Arrow(true, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ true)), pos));
+        return this.finishRefine(this.finishNode(Syntax.Arrow(true, parameters, rest, this.parseAndRefineAssignmentExpressionOrHigher(In, /*Await*/ true)), pos));
     }
 
     private parseArrowFunctionRest(In: boolean, head: AssignmentExpressionOrHigher) {
@@ -779,7 +781,7 @@ export class Parser {
         this.expectToken(Token.EqualsGreaterThanToken);
         if (this.token() === Token.OpenBraceToken) return this.errorAtToken(`Expression expected.`);
         // ArrowFunction cannot be further refined
-        return this.finishRefine(this.finishNode(Syntax.Arrow(false, parameters, rest, this.parseAssignmentExpressionOrHigher(In, /*Await*/ false)), Syntax.pos(head)));
+        return this.finishRefine(this.finishNode(Syntax.Arrow(false, parameters, rest, this.parseAndRefineAssignmentExpressionOrHigher(In, /*Await*/ false)), Syntax.pos(head)));
     }
 
     private parseAndRefineAssignmentExpressionOrHigher(In: boolean, Await: boolean) {

@@ -1,4 +1,5 @@
 import * as fs from "fs";
+import * as vm from "vm";
 import { start, Recoverable, ReplOptions } from "repl";
 import { Query, AsyncQuery } from "iterable-query";
 import { EOL } from "os";
@@ -45,50 +46,20 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
     resetContext(repl.context);
     return repl;
 
-    function resetContext(replContext: any) {
-        for (const key of Object.keys(context)) {
-            Object.defineProperty(replContext, key, Object.getOwnPropertyDescriptor(context, key)!);
-        }
+    function resetContext(replContext: vm.Context) {
+        Object.defineProperties(replContext, Object.getOwnPropertyDescriptors(context));
     }
 
-    function onEval(code: string, context: any, _file: string, cb: (error: Error | null, result?: any) => void) {
+    function onEval(code: string, context: vm.Context, _file: string, cb: (error: Error | null, result: any) => void) {
         onEvalAsync(code, context).then(
             value => cb(null, value),
-            err => cb(err));
+            err => cb(err, null));
     }
 
-    function onExec(file: string) {
-        file = file.trim();
-        const code = fs.readFileSync(file.trim(), "utf8");
-        (repl as any).eval(code, repl.context, file, finish);
-        function finish(e: Error | null, ret: any) {
-            if (e) {
-                repl.emit("error", e);
-            }
-            else {
-                (repl as any).clearBufferedCommand();
-                repl.outputStream.write((repl as any).writer(ret) + "\n");
-                repl.displayPrompt();
-            }
-        }
-    }
-
-    function onLimit(text: string) {
-        (repl as any).clearBufferedCommand();
-        if (text) {
-            const count = parseInt(text);
-            if (count > 0) limit = count;
-        }
-        else {
-            repl.outputStream.write(limit + EOL + EOL);
-        }
-        repl.displayPrompt();
-    }
-
-    async function onEvalAsync(code: string, context: any) {
+    async function onEvalAsync(code: string, context: vm.Context) {
         code = code.trim();
         if (!code) {
-            (repl as any).clearBufferedCommand();
+            repl.clearBufferedCommand();
             repl.displayPrompt();
             return;
         }
@@ -112,5 +83,33 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
                 throw e;
             }
         }
+    }
+
+    function onExec(file: string) {
+        file = file.trim();
+        const code = fs.readFileSync(file, "utf8");
+        (repl as any).eval(code, repl.context, file, finish);
+        function finish(e: Error | null, ret: any) {
+            if (e) {
+                repl.emit("error", e);
+            }
+            else {
+                repl.clearBufferedCommand();
+                repl.outputStream.write((repl as any).writer(ret) + "\n");
+                repl.displayPrompt();
+            }
+        }
+    }
+
+    function onLimit(text: string) {
+        repl.clearBufferedCommand();
+        if (text) {
+            const count = parseInt(text);
+            if (count > 0) limit = count;
+        }
+        else {
+            repl.outputStream.write(limit + EOL + EOL);
+        }
+        repl.displayPrompt();
     }
 }

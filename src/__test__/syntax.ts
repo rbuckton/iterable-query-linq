@@ -2,6 +2,7 @@ import { expect } from "chai";
 import { Parser } from "../parser";
 import { SyntaxKind, ParenthesizedExpression, AssignmentExpression, ArrowFunction, Identifier } from "../syntax";
 import { UnrecoverableSyntaxError } from "../errors";
+import { ExpressionVisitor } from "../visitor";
 
 describe("syntax", () => {
     it("object literal", () => {
@@ -41,4 +42,9 @@ describe("syntax", () => {
         expect((node as ArrowFunction).body.kind).to.equal(SyntaxKind.Identifier);
         expect(((node as ArrowFunction).body as Identifier).text).to.equal("a");
     });
+    it("performs refinements in ArrowFunction bodies", () => {
+        const node = new Parser().parse(`d => (a)`);
+        const visitor = new class extends ExpressionVisitor {};
+        expect(() => visitor.visit(node)).to.not.throw();
+    })
 });
