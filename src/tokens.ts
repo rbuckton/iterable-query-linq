@@ -71,7 +71,6 @@ export enum Token {
     DescendingKeyword,
     EqualsKeyword,
     GroupKeyword,
-    HierarchyKeyword,               // `hierarchy`
     IntoKeyword,
     JoinKeyword,
     OnKeyword,
@@ -79,18 +78,6 @@ export enum Token {
     SelectKeyword,
     UsingKeyword,
     WhereKeyword,
-
-    // Query hierarchy keywords
-    AncestorsofKeyword,             // `ancestorof`
-    AncestorsorselfofKeyword,       // `ancestororselfof`
-    ChildrenofKeyword,              // `childof`
-    DescendantsofKeyword,           // `descendantof`
-    DescendantsorselfofKeyword,     // `descendantorselfof`
-    ParentofKeyword,                // `parentof`
-    RootofKeyword,                  // `rootof`
-    SelfofKeyword,                  // `selfof`
-    SiblingsofKeyword,              // `siblingof`
-    SiblingsorselfofKeyword,        // `siblingorselfof`
 
     // Punctuation
     OpenBraceToken,
@@ -293,8 +280,7 @@ export namespace Token {
         | Token.OrderbyKeyword
         | Token.SelectKeyword
         | Token.UsingKeyword
-        | Token.WhereKeyword
-        | Token.HierarchyKeyword;
+        | Token.WhereKeyword;
 
     export function isQueryKeyword(token: Token): token is QueryKeyword {
         switch (token) {
@@ -311,51 +297,9 @@ export namespace Token {
             case Token.SelectKeyword:
             case Token.UsingKeyword:
             case Token.WhereKeyword:
-            case Token.HierarchyKeyword:
                 return true;
             default:
                 return tokenIsNot<QueryKeyword>(token);
-        }
-    }
-
-    // HierarchyAxisKeyword :
-    //     `rootof`
-    //     `parentof`
-    //     `selfof`
-    //     `childrenof`
-    //     `ancestorsof`
-    //     `ancestorsorselfof`
-    //     `descendantsof`
-    //     `descendantsorselfof`
-    //     `siblingsof`
-    //     `siblingsorselfof`
-    export type HierarchyAxisKeyword =
-        | Token.RootofKeyword
-        | Token.ParentofKeyword
-        | Token.ChildrenofKeyword
-        | Token.AncestorsofKeyword
-        | Token.AncestorsorselfofKeyword
-        | Token.DescendantsofKeyword
-        | Token.DescendantsorselfofKeyword
-        | Token.SelfofKeyword
-        | Token.SiblingsofKeyword
-        | Token.SiblingsorselfofKeyword;
-
-    export function isHierarchyAxisKeyword(token: Token): token is HierarchyAxisKeyword {
-        switch (token) {
-            case Token.RootofKeyword:
-            case Token.ParentofKeyword:
-            case Token.ChildrenofKeyword:
-            case Token.AncestorsofKeyword:
-            case Token.AncestorsorselfofKeyword:
-            case Token.DescendantsofKeyword:
-            case Token.DescendantsorselfofKeyword:
-            case Token.SelfofKeyword:
-            case Token.SiblingsofKeyword:
-            case Token.SiblingsorselfofKeyword:
-                return true;
-            default:
-                return tokenIsNot<HierarchyAxisKeyword>(token);
         }
     }
 
@@ -363,15 +307,13 @@ export namespace Token {
         | ECMAScriptReservedWord
         | ECMAScriptContextualKeyword
         | QueryKeyword
-        | DirectionKeyword
-        | HierarchyAxisKeyword;
+        | DirectionKeyword;
 
     export function isKeyword(token: Token): token is Keyword {
         return isECMAScriptReservedWord(token)
             || isECMAScriptContextualKeyword(token)
             || isQueryKeyword(token)
             || isDirectionKeyword(token)
-            || isHierarchyAxisKeyword(token)
             || tokenIsNot<Keyword>(token);
     }
 
@@ -673,8 +615,6 @@ export namespace Token {
     }
 
     const stringToSourceTokenMap: Record<string, SourceToken> = {
-        "ancestorsof": Token.AncestorsofKeyword,
-        "ancestorsorselfof": Token.AncestorsorselfofKeyword,
         "ascending": Token.AscendingKeyword,
         "async": Token.AsyncKeyword,
         "await": Token.AwaitKeyword,
@@ -682,15 +622,12 @@ export namespace Token {
         "by": Token.ByKeyword,
         "case": Token.CaseKeyword,
         "catch": Token.CatchKeyword,
-        "childrenof": Token.ChildrenofKeyword,
         "class": Token.ClassKeyword,
         "const": Token.ConstKeyword,
         "continue": Token.ContinueKeyword,
         "debugger": Token.DebuggerKeyword,
         "default": Token.DefaultKeyword,
         "delete": Token.DeleteKeyword,
-        "descendantsof": Token.DescendantsofKeyword,
-        "descendantsorselfof": Token.DescendantsorselfofKeyword,
         "descending": Token.DescendingKeyword,
         "do": Token.DoKeyword,
         "else": Token.ElseKeyword,
@@ -704,7 +641,6 @@ export namespace Token {
         "from": Token.FromKeyword,
         "function": Token.FunctionKeyword,
         "group": Token.GroupKeyword,
-        "hierarchy": Token.HierarchyKeyword,
         "if": Token.IfKeyword,
         "implements": Token.ImplementsKeyword,
         "import": Token.ImportKeyword,
@@ -720,16 +656,11 @@ export namespace Token {
         "on": Token.OnKeyword,
         "orderby": Token.OrderbyKeyword,
         "package": Token.PackageKeyword,
-        "parentof": Token.ParentofKeyword,
         "private": Token.PrivateKeyword,
         "protected": Token.ProtectedKeyword,
         "public": Token.PublicKeyword,
         "return": Token.ReturnKeyword,
-        "rootof": Token.RootofKeyword,
         "select": Token.SelectKeyword,
-        "selfof": Token.SelfofKeyword,
-        "siblingsof": Token.SiblingsofKeyword,
-        "siblingsorselfof": Token.SiblingsorselfofKeyword,
         "static": Token.StaticKeyword,
         "super": Token.SuperKeyword,
         "switch": Token.SwitchKeyword,

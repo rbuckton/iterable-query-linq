@@ -1,7 +1,7 @@
 import { Token, TokenFlags } from "./tokens";
 import { RecoverableSyntaxError } from "./errors";
 
-const keywordPattern = String.raw`\b(?:a(?:ncestors(?:orself)?of|s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|hildrenof|lass|on(?:st|tinue))|d(?:e(?:bugger|fault|lete|scend(?:ants(?:orself)?of|ing))|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|hierarchy|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:a(?:rentof|ckage)|r(?:ivate|otected)|ublic)|r(?:eturn|ootof)|s(?:el(?:ect|fof)|iblings(?:orself)?of|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
+const keywordPattern = String.raw`\b(?:a(?:s(?:cending|ync)|wait)|b(?:reak|y)|c(?:a(?:se|tch)|lass|on(?:st|tinue))|d(?:e(?:bugger|fault|lete|scending)|o)|e(?:lse|num|quals|x(?:port|tends))|f(?:alse|inally|or|rom|unction)|group|i(?:f|mp(?:lements|ort)|n(?:|stanceof|t(?:erface|o))?)|join|let|n(?:ew|ull)|o(?:f|n|rderby)|p(?:ackage|r(?:ivate|otected)|ublic)|return|s(?:elect|tatic|uper|witch)|t(?:h(?:is|row)|r(?:ue|y)|ypeof)|using|v(?:ar|oid)|w(?:h(?:ere|ile)|ith)|yield)\b`;
 const keywordIndex = 1;
 const operatorPattern = String.raw`[{}()\[\],~?:]|\.(?:\.\.)?|<{1,2}=?|>{1,3}=?|=(?:={1,2}|>)?|!={0,2}|\+[+=]?|-[-=]?|\*{1,2}=?|\/=?|%=?|&[&=]?|\|[|=]?|\^=?`;
 const operatorIndex = 2;

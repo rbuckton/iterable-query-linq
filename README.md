@@ -57,41 +57,10 @@ The `from` clause is used to bind an identifier to each element in an expression
 from ID in SOURCE
 ```
 
-#### Advanced usage
-```
-from [await] ID in [AXIS] SOURCE [with hierarchy HIERARCHY]
-```
-
 ### Cartesian Joins
 
 Multiple `from` clauses can be chained together to form a cartesian join, resulting
 in the cartesian product of the elements in each sequence.
-
-### Hierarchies
-
-If the _source_ is a `HierarchyIterable`, you may use an _axis_ modifier to select an axis of the hierarchy:
-
-- `rootof` - Gets the root node for each node in the iterable.
-- `parentof` - Gets the parent node for each node in the iterable.
-- `selfof` - Gets the self node for each node in the iterable.
-- `childrenof` - Gets the children for each node in the iterable.
-- `ancestorsof` - Gets the ancestor nodes for each node in the iterable.
-- `ancestorsorselfof` - Gets the ancestor nodes and self nodes for each node in the iterable.
-- `descendantsof` - Gets the descendant nodes for each node in the iterable.
-- `descendantsorselfof` - Gets the descendant nodes and self nodes for each node in the iterable.
-- `siblingsof` - Gets the sibling nodes for each node in the iterable.
-- `siblingsorselfof` - Gets the sibling nodes and self nodes for each node in the iterable.
-
-If _source_ is not a `HierarchyIterable`, you can apply a custom `HierarchyProvider` using the `with hierarchy` clause.
-
-#### Example
-```ts
-linq`
-    from node in descendantsof ${[root]} with hierarchy ${hierarchy}
-    where node.nodeName === "A"
-    select node.innerText
-`
-```
 
 ### Async Iteration
 
@@ -117,13 +86,6 @@ selected from the outer and inner iterables:
 join INNER_ID in INNER_SOURCE on OUTER_KEY equals INNER_KEY
 ```
 
-#### Advanced usage
-```
-join [await] INNER_ID in [AXIS] INNER_SOURCE [with hierarchy HIERARCHY] on OUTER_KEY equals INNER_KEY
-```
-
-See the [`from` Clause](#from-clause) for more information on advanced usage.
-
 ## `join into` Clause
 
 The `join into` clause is similar to the `join` clause except that it creates a one-to-many relationship in the form of a group join:
@@ -131,11 +93,6 @@ The `join into` clause is similar to the `join` clause except that it creates a 
 #### Basic usage
 ```
 join INNER_ID in INNER_SOURCE on OUTER_KEY equals INNER_KEY into ID
-```
-
-#### Advanced usage
-```
-join [await] INNER_ID in [AXIS] INNER_SOURCE [with hierarchy HIERARCHY] on OUTER_KEY equals INNER_KEY into ID
 ```
 
 ## `let` Clause

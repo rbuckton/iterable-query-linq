@@ -46,5 +46,8 @@ describe("syntax", () => {
         const node = new Parser().parse(`d => (a)`);
         const visitor = new class extends ExpressionVisitor {};
         expect(() => visitor.visit(node)).to.not.throw();
-    })
+    });
+    it("allow 'from' as an identifier", () => {
+        expect(() => new Parser().parse(`from`)).to.not.throw();
+    });
 });

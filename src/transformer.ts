@@ -30,16 +30,6 @@ class UnboundQuery {
         return new UnboundQuery(expression, async);
     }
 
-    withHierarchy(hierarchyExpression: Expression) {
-        const expression = callQueryMethod(this.expression, "toHierarchy", [hierarchyExpression]);
-        return new UnboundQuery(expression, this.async);
-    }
-
-    traverse(axis: Token.HierarchyAxisKeyword) {
-        const expression = callQueryMethod(this.expression, getAxis(axis), []);
-        return new UnboundQuery(expression, this.async);
-    }
-
     select(projection: ArrowFunction): UnboundQuery {
         const expression = callQueryMethod(this.expression, "select", [projection]);
         return new UnboundQuery(expression, this.async);
@@ -165,8 +155,6 @@ export class Transformer extends ExpressionVisitor {
 
     private transformSequenceBinding(node: SequenceBinding): BoundQuery {
         let q = BoundQuery.from(this.visit(node.expression), node.await);
-        if (node.withHierarchy) q = q.withHierarchy(this.visit(node.withHierarchy));
-        if (node.hierarchyAxisKeyword) q = q.traverse(node.hierarchyAxisKeyword);
         return q.into(this.visitBindingName(node.name));
     }
 
@@ -445,21 +433,6 @@ function asAsyncQuery(expression: Expression) {
 
 function callQueryMethod(expression: Expression, method: Extract<keyof OrderedHierarchyQuery<any>, string>, argumentList: ReadonlyArray<Argument | Expression>) {
     return Syntax.Call(Syntax.Property(expression, method), argumentList);
-}
-
-function getAxis(hierarchyAxisKeyword: Token.HierarchyAxisKeyword) {
-    switch (hierarchyAxisKeyword) {
-        case Token.RootofKeyword: return "root";
-        case Token.ParentofKeyword: return "parents";
-        case Token.ChildrenofKeyword: return "children";
-        case Token.AncestorsofKeyword: return "ancestors";
-        case Token.AncestorsorselfofKeyword: return "ancestorsAndSelf";
-        case Token.DescendantsofKeyword: return "descendants";
-        case Token.DescendantsorselfofKeyword: return "descendantsAndSelf";
-        case Token.SelfofKeyword: return "self";
-        case Token.SiblingsofKeyword: return "siblings";
-        case Token.SiblingsorselfofKeyword: return "siblingsAndSelf";
-    }
 }
 
 function isDescending(comparator: OrderbyComparator) {

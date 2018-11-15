@@ -1,9 +1,8 @@
 import * as users from "./data/users";
-import * as nodes from "./data/nodes";
 import { linq } from "../";
 import { expect } from "chai";
 import { Query, AsyncQuery } from "iterable-query";
-import { toHierarchy, toHierarchyAsync, toArray, toArrayAsync } from "iterable-query/fn";
+import { toArray, toArrayAsync } from "iterable-query/fn";
 import { getCompilationResult } from "../linq";
 // import * as books from "./data/books";
 // import * as numbers from "./data/numbers";
@@ -47,6 +46,15 @@ describe("linq", () => {
         `;
         expectSequence(q, [{ k: 1, b: 2 }, { k: 1, b: 3 }]);
     });
+    it("from from", () => {
+        const q = linq`
+            from x in 
+                from y in [1, 2, 3] 
+                select y
+            select x
+        `;
+        expectSequence(q, [1, 2, 3]);
+    });
 
     describe("FromClause :", () => {
         it("`from` BindingIdentifier `in` AssignmentExpression", () => {
@@ -63,54 +71,12 @@ describe("linq", () => {
             `;
             expectSequence(q, [1, 2, 3]);
         });
-        it("`from` BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression", () => {
-            const q = linq`
-                from x in ${nodes.nodes} with hierarchy ${nodes.nodeHierarchy}
-                select x
-            `;
-            expectSequence(q, nodes.nodes);
-        });
-        it("`from` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression", () => {
-            const q = linq`
-                from x in childrenof ${toHierarchy([nodes.nodeA], nodes.nodeHierarchy)}
-                select x
-            `;
-            expectSequence(q, nodes.nodeA.children!)
-        });
-        it("`from` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression", () => {
-            const q = linq`
-                from x in childrenof ${[nodes.nodeA]} with hierarchy ${nodes.nodeHierarchy}
-                select x
-            `;
-            expectSequence(q, nodes.nodeA.children!);
-        });
         it("`from` `await` BindingIdentifier `in` AssignmentExpression", async () => {
             const q = linq.async`
                 from await x in ${[1, Promise.resolve(2), 3]}
                 select x
             `;
             expectSequenceAsync(q, [1, 2, 3]);
-        });
-        it("`from` `await` BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression", async () => {
-            const q = linq.async`
-                from await x in ${nodes.nodes.map(x => Promise.resolve(x))} with hierarchy ${nodes.nodeHierarchy}
-                select x
-            `;
-            await expectSequenceAsync(q, nodes.nodes);
-        });
-        it("`from` `await` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression", async () => {
-            const q = linq.async`
-                from await x in childrenof ${toHierarchyAsync([Promise.resolve(nodes.nodeA)], nodes.nodeHierarchy)}
-                select x
-            `;
-            await expectSequenceAsync(q, nodes.nodeA.children!)
-        });
-        it("`from` `await` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression", async () => {
-            const q = linq.async`
-                from await x in childrenof ${[Promise.resolve(nodes.nodeA)]} with hierarchy ${nodes.nodeHierarchy}
-                select x
-            `;
-            await expectSequenceAsync(q, nodes.nodeA.children!);
         });
     });
 
@@ -251,38 +217,6 @@ describe("linq", () => {
                 { role: users.userRole, user: users.daveUser }
             ]);
         });
-        it("Clause `join` BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", () => {
-            const q = linq`
-                from role in ${users.roles}
-                join user in ${users.users} with hierarchy ${users.userHierarchy} on role.name equals user.role
-                select { role, user }
-            `;
-            expectSequence(q, [
-                { role: users.adminRole, user: users.aliceUser },
-                { role: users.userRole, user: users.bobUser },
-                { role: users.userRole, user: users.daveUser }
-            ]);
-        });
-        it("Clause `join` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", () => {
-            const q = linq`
-                from role in ${users.roles}
-                join user in parentof ${toHierarchy(users.users, users.userHierarchy)} on role.name equals user.role
-                select { role, user }
-            `;
-            expectSequence(q, [
-                { role: users.adminRole, user: users.aliceUser },
-            ]);
-        });
-        it("Clause `join` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", () => {
-            const q = linq`
-                from role in ${users.roles}
-                join user in parentof ${users.users} with hierarchy ${users.userHierarchy} on role.name equals user.role
-                select { role, user }
-            `;
-            expectSequence(q, [
-                { role: users.adminRole, user: users.aliceUser },
-            ]);
-        });
         it("[+Into] Clause `join` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", () => {
             const q = linq`
                 from role in ${users.roles}
@@ -317,38 +251,6 @@ describe("linq", () => {
                 { role: users.adminRole, user: users.aliceUser },
                 { role: users.userRole, user: users.bobUser },
                 { role: users.userRole, user: users.daveUser }
-            ]);
-        });
-        it("Clause `join` `await` BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
-            const q = linq.async`
-                from role in ${users.roles}
-                join await user in ${users.users.map(x => Promise.resolve(x))} with hierarchy ${users.userHierarchy} on role.name equals user.role
-                select { role, user }
-            `;
-            await expectSequenceAsync(q, [
-                { role: users.adminRole, user: users.aliceUser },
-                { role: users.userRole, user: users.bobUser },
-                { role: users.userRole, user: users.daveUser }
-            ]);
-        });
-        it("Clause `join` `await` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
-            const q = linq.async`
-                from role in ${users.roles}
-                join await user in parentof ${toHierarchyAsync(users.users.map(x => Promise.resolve(x)), users.userHierarchy)} on role.name equals user.role
-                select { role, user }
-            `;
-            await expectSequenceAsync(q, [
-                { role: users.adminRole, user: users.aliceUser },
-            ]);
-        });
-        it("Clause `join` `await` HierarchyAxisKeyword BindingIdentifier `in` AssignmentExpression `with` `hierarchy` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
-            const q = linq.async`
-                from role in ${users.roles}
-                join await user in parentof ${users.users.map(x => Promise.resolve(x))} with hierarchy ${users.userHierarchy} on role.name equals user.role
-                select { role, user }
-            `;
-            await expectSequenceAsync(q, [
-                { role: users.adminRole, user: users.aliceUser },
             ]);
         });
         it("[+Into] Clause `join` `await` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", async () => {

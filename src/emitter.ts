@@ -141,8 +141,6 @@ export class Emitter {
                 return this.emitTextLiteral(node);
 
             // Names
-            case SyntaxKind.Identifier:
-            case SyntaxKind.Identifier:
             case SyntaxKind.Identifier: return this.emitIdentifier(node);
             case SyntaxKind.ComputedPropertyName: return this.emitComputedPropertyName(node);
 
@@ -208,6 +206,8 @@ export class Emitter {
             // Cover Grammars
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
             case SyntaxKind.CoverInitializedName:
+            case SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead:
+            case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
                 throw new Error("Not supported");
 
             default: 
@@ -252,13 +252,7 @@ export class Emitter {
         if (node.await) this.writeToken(Token.AwaitKeyword);
         this.writeNode(node.name);
         this.writeToken(Token.InKeyword);
-        if (node.hierarchyAxisKeyword) this.writeToken(node.hierarchyAxisKeyword);
         this.writeNode(node.expression);
-        if (node.withHierarchy) {
-            this.writeToken(Token.WithKeyword);
-            this.writeToken(Token.HierarchyKeyword);
-            this.writeNode(node.withHierarchy);
-        }
     }
 
     private emitFromClause(node: FromClause): void {

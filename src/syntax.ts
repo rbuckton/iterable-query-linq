@@ -74,7 +74,9 @@ export enum SyntaxKind {
 
     // Cover grammars
     CoverParenthesizedExpressionAndArrowParameterList,
-    CoverInitializedName
+    CoverInitializedName,
+    CoverElementAccessExpressionAndQueryExpressionHead,
+    CoverBinaryExpressionAndQueryExpressionHead
 }
 
 export interface TextRange {
@@ -112,8 +114,8 @@ export namespace Syntax {
     export function RegularExpression(text: string): RegularExpressionLiteral {
         return { kind: SyntaxKind.RegularExpressionLiteral, text, flags: TokenFlags.None, [Syntax.location]: noTextRange }
     }
-    export function Identifier(text: string): Identifier {
-        return { kind: SyntaxKind.Identifier, text, [Syntax.location]: noTextRange };
+    export function Identifier(text: string, originalKeyword?: Token.Keyword): Identifier {
+        return { kind: SyntaxKind.Identifier, text, originalKeyword, [Syntax.location]: noTextRange };
     }
     export function ComputedPropertyName(expression: Expression): ComputedPropertyName {
         return { kind: SyntaxKind.ComputedPropertyName, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
@@ -238,9 +240,9 @@ export namespace Syntax {
     export function Rest(name: BindingName | string): BindingRestElement {
         return Syntax.BindingRestElement(name);
     }
-    export function SequenceBinding(await: boolean, name: BindingName | string, hierarchyAxisKeyword: Token.HierarchyAxisKeyword | undefined, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
+    export function SequenceBinding(await: boolean, name: BindingName | string, expression: Expression): SequenceBinding {
         name = possiblyBindingIdentifier(name);
-        return { kind: SyntaxKind.SequenceBinding, await, name, hierarchyAxisKeyword, expression: toAssignmentExpressionOrHigher(expression), withHierarchy: withHierarchy && toAssignmentExpressionOrHigher(withHierarchy), [Syntax.location]: noTextRange };
+        return { kind: SyntaxKind.SequenceBinding, await, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
     export function FromClause(outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
         return { kind: SyntaxKind.FromClause, outerClause, sequenceBinding, [Syntax.location]: noTextRange };
@@ -478,8 +480,8 @@ export namespace SyntaxUpdate {
     export function Comma(node: CommaListExpression, expressions: ReadonlyArray<Expression>): CommaListExpression {
         return node.expressions !== expressions ? assignLocation(Syntax.CommaList(expressions), node) : node;
     }
-    export function SequenceBinding(node: SequenceBinding, name: BindingName | string, expression: Expression, withHierarchy: Expression | undefined): SequenceBinding {
-        return node.name !== name || node.expression !== expression || node.withHierarchy !== withHierarchy ? assignLocation(Syntax.SequenceBinding(node.await, name, node.hierarchyAxisKeyword, expression, withHierarchy), node) : node;
+    export function SequenceBinding(node: SequenceBinding, name: BindingName | string, expression: Expression): SequenceBinding {
+        return node.name !== name || node.expression !== expression ? assignLocation(Syntax.SequenceBinding(node.await, name, expression), node) : node;
     }
     export function FromClause(node: FromClause, outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
         return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding ? assignLocation(Syntax.FromClause(outerClause, sequenceBinding), node) : node;
@@ -529,6 +531,7 @@ export namespace SyntaxUpdate {
 export interface Identifier extends Syntax {
     readonly kind: SyntaxKind.Identifier;
     readonly text: string;
+    readonly originalKeyword: Token.Keyword | undefined;
 }
 
 export type IdentifierName = Identifier;
@@ -876,13 +879,15 @@ export type MemberExpressionOrHigher =
     | PrimaryExpression
     | PropertyAccessExpression
     | ElementAccessExpression
-    | NewExpression;
+    | NewExpression
+    | CoverElementAccessExpressionAndQueryExpressionHead;
 
 export function isMemberExpressionOrHigher(node: Node): node is MemberExpressionOrHigher {
     switch (node.kind) {
         case SyntaxKind.PropertyAccessExpression:
         case SyntaxKind.ElementAccessExpression:
         case SyntaxKind.NewExpression:
+        case SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead:
             return true;
         default:
             return isPrimaryExpression(node);
@@ -953,17 +958,13 @@ export interface ConditionalExpression extends Syntax {
 }
 
 // SequenceBinding[Await] :
-//     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await]
-//     BindingIdentifier[?Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
-//     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await]
-//     [+Await] `await` BindingIdentifier[+Await] `in` HierarchyAxisKeyword? AssignmentExpression[+In, ?Await] `with` `hierarchy` AssignmentExpression[+In, ?Await]
+//     BindingIdentifier[?Await] `in` AssignmentExpression[+In, ?Await]
+//     [+Await] `await` BindingIdentifier[+Await] `in` AssignmentExpression[+In, ?Await]
 export interface SequenceBinding extends Syntax {
     readonly kind: SyntaxKind.SequenceBinding;
     readonly await: boolean;
     readonly name: BindingName;
-    readonly hierarchyAxisKeyword: Token.HierarchyAxisKeyword | undefined;
     readonly expression: AssignmentExpressionOrHigher;
-    readonly withHierarchy: AssignmentExpressionOrHigher | undefined;
 }
 
 // FromClause[Await] :
@@ -1114,11 +1115,13 @@ export interface ArrowFunction extends Syntax {
 
 export type BinaryExpressionOrHigher =
     | UnaryExpressionOrHigher
-    | BinaryExpression;
+    | BinaryExpression
+    | CoverBinaryExpressionAndQueryExpressionHead;
 
 export function isBinaryExpressionOrHigher(node: Node): node is BinaryExpressionOrHigher {
     switch (node.kind) {
         case SyntaxKind.BinaryExpression:
+        case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
             return true;
         default:
             return isUnaryExpressionOrHigher(node);
@@ -1177,6 +1180,26 @@ export interface CoverParenthesizedExpressionAndArrowParameterList extends Synta
     readonly rest: BindingRestElement | undefined;
 }
 
+// CoverElementAccessExpressionAndQueryExpressionHead[Yield, Await] :
+//      `from` ArrayLiteral[?Yield, ?Await]
+//      `from` ObjectBindingPattern[?Yield, ?Await]
+//      `from` BindingIdentifier[?Yield, ?Await]
+//      [+Await] `from` `await` BindingName[?Yield, ?Await]
+export interface CoverElementAccessExpressionAndQueryExpressionHead extends Syntax {
+    readonly kind: SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead;
+    readonly expression: LeftHandSideExpressionOrHigher;
+    readonly await: boolean;
+    readonly argument: ArrayLiteral | BindingName;
+}
+
+// CoverBinaryExpressionAndQueryExpressionHead[Yield, Await] :
+//      RelationalExpression[Yield, Await] `in` AssignmentExpression[+In, ?Yield, ?Await]
+export interface CoverBinaryExpressionAndQueryExpressionHead extends Syntax {
+    readonly kind: SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead;
+    readonly left: CoverElementAccessExpressionAndQueryExpressionHead;
+    readonly right: AssignmentExpressionOrHigher;
+}
+
 export interface Block extends Syntax {
     readonly kind: SyntaxKind.Block;
     readonly statements: ReadonlyArray<Statement>;
@@ -1221,11 +1244,6 @@ export type Node =
     | StringLiteral
     | NumberLiteral
     | RegularExpressionLiteral
-
-    // Keywords
-    // Punctuation
-    // Selectors
-    // | Token
 
     // Names
     | IdentifierName
@@ -1295,4 +1313,6 @@ export type Node =
     // Cover Grammars
     | CoverParenthesizedExpressionAndArrowParameterList
     | CoverInitializedName
+    | CoverElementAccessExpressionAndQueryExpressionHead
+    | CoverBinaryExpressionAndQueryExpressionHead
     ;

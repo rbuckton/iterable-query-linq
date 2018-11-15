@@ -73,6 +73,8 @@ export abstract class ExpressionVisitor {
 
             // Cover Grammars
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
+            case SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead:
+            case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
             // case SyntaxKind.CoverInitializedName:
                 throw new Error("Not supported");
             
@@ -92,8 +94,7 @@ export abstract class ExpressionVisitor {
     protected visitSequenceBinding(node: SequenceBinding): SequenceBinding {
         return SyntaxUpdate.SequenceBinding(node,
             node.name,
-            this.visit(node.expression),
-            node.withHierarchy && this.visit(node.withHierarchy));
+            this.visit(node.expression));
     }
 
     protected visitQueryBodyClause(node: QueryBodyClause): QueryBodyClause;
