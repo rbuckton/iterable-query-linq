@@ -88,14 +88,14 @@ export function startLinqRepl(context: Record<string, any>, options: LinqReplOpt
     function onExec(file: string) {
         file = file.trim();
         const code = fs.readFileSync(file, "utf8");
-        (repl as any).eval(code, repl.context, file, finish);
+        repl.eval(code, repl.context, file, finish);
         function finish(e: Error | null, ret: any) {
             if (e) {
                 repl.emit("error", e);
             }
             else {
                 repl.clearBufferedCommand();
-                repl.outputStream.write((repl as any).writer(ret) + "\n");
+                repl.outputStream.write(repl.writer(ret) + "\n");
                 repl.displayPrompt();
             }
         }
