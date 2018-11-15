@@ -1,6 +1,6 @@
 {
   "name": "iterable-query-linq",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "LINQ-like syntax using tagged templates.",
   "main": "dist",
   "typings": "dist",
