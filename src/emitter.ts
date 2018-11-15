@@ -10,10 +10,9 @@ import {
     ObjectBindingPattern, ArrayBindingPattern, BindingProperty, AssignmentExpressionOrHigher,
     BindingRestProperty, ShorthandBindingProperty, ObjectAssignmentPattern, AssignmentProperty,
     ShorthandAssignmentProperty, ArrayAssignmentPattern, AssignmentElement, AssignmentRestElement,
-    AssignmentExpression, AssignmentRestProperty, SequenceBinding, ThisExpression, NullLiteral, 
+    AssignmentExpression, AssignmentRestProperty, SequenceBinding, ThisExpression, NullLiteral,
     BooleanLiteral, Identifier, Block, LetStatement, ExpressionStatement, ReturnStatement,
 } from "./syntax";
-import { isIdentifierPart } from "./scanner";
 import { assertNever } from "./utils";
 import { Token } from "./tokens";
 
@@ -104,9 +103,8 @@ export class Emitter {
         let leadingSpace = false;
         let trailingSpace = false;
         if (Token.isKeyword(kind)) {
-            leadingSpace = 
-                this._text.length > 0 && 
-                isIdentifierPart(this._text.charAt(this._text.length - 1));
+            const ch = this._text.length > 0 ? this._text.charAt(this._text.length - 1) : undefined;
+            leadingSpace = ch !== undefined && ch !== "(" && ch !== "[";
             trailingSpace = true;
         }
         else if (Token.isPunctuation(kind)) {
@@ -210,7 +208,7 @@ export class Emitter {
             case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
                 throw new Error("Not supported");
 
-            default: 
+            default:
                 return assertNever(node);
         }
     }
@@ -575,18 +573,18 @@ export class Emitter {
         this.writeLine();
         this.writeToken(Token.CloseBraceToken);
     }
-    
+
     private emitLetStatement(node: LetStatement) {
         this.writeToken(Token.LetKeyword);
         this.writeNodeList(node.variables, Token.CommaToken, false);
         this.writeToken(Token.SemicolonToken);
     }
-    
+
     private emitExpressionStatement(node: ExpressionStatement) {
         this.writeNode(node.expression);
         this.writeToken(Token.SemicolonToken);
     }
-    
+
     private emitReturnStatement(node: ReturnStatement) {
         this.writeToken(Token.ReturnKeyword);
         this.writeNode(node.expression);
