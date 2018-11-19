@@ -1,4 +1,4 @@
-import { BinaryPrecedence, getBinaryOperatorPrecedence, visitList, assertFail } from "./utils";
+import { BinaryPrecedence, getBinaryOperatorPrecedence, visitList } from "./utils";
 import { TokenFlags, Token } from "./tokens";
 
 export enum SyntaxKind {
@@ -16,15 +16,16 @@ export enum SyntaxKind {
     ComputedPropertyName,
 
     // Query body clauses
+    QueryBody,
     FromClause,
+    JoinClause,
     LetClause,
     WhereClause,
     OrderbyClause,
     OrderbyComparator,
     GroupClause,
-    JoinClause,
     SelectClause,
-    SequenceBinding,
+    QueryContinuation,
 
     // Expressions
     ThisExpression,
@@ -75,8 +76,7 @@ export enum SyntaxKind {
     // Cover grammars
     CoverParenthesizedExpressionAndArrowParameterList,
     CoverInitializedName,
-    CoverElementAccessExpressionAndQueryExpressionHead,
-    CoverBinaryExpressionAndQueryExpressionHead
+    CoverElementAccessExpressionAndQueryExpressionHead
 }
 
 export interface TextRange {
@@ -240,39 +240,40 @@ export namespace Syntax {
     export function Rest(name: BindingName | string): BindingRestElement {
         return Syntax.BindingRestElement(name);
     }
-    export function SequenceBinding(await: boolean, name: BindingName | string, expression: Expression): SequenceBinding {
+    export function Query(fromClause: FromClause, queryBody: QueryBody): QueryExpression {
+        return { kind: SyntaxKind.QueryExpression, fromClause, queryBody, [Syntax.location]: noTextRange };
+    }
+    export function QueryBody(queryBodyClauses: ReadonlyArray<QueryBodyClause>, selectOrGroupClause: SelectOrGroupClause, queryContinuation: QueryContinuation | undefined): QueryBody {
+        return { kind: SyntaxKind.QueryBody, queryBodyClauses, selectOrGroupClause, queryContinuation, [Syntax.location]: noTextRange };
+    }
+    export function QueryContinuation(name: RangeBinding, queryBody: QueryBody): QueryContinuation {
+        return { kind: SyntaxKind.QueryContinuation, name, queryBody, [Syntax.location]: noTextRange };
+    }
+    export function FromClause(await: boolean, name: RangeBinding | string, expression: Expression): FromClause {
         name = possiblyBindingIdentifier(name);
-        return { kind: SyntaxKind.SequenceBinding, await, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+        return { kind: SyntaxKind.FromClause, await, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
-    export function FromClause(outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
-        return { kind: SyntaxKind.FromClause, outerClause, sequenceBinding, [Syntax.location]: noTextRange };
+    export function JoinClause(await: boolean, name: RangeBinding | string, expression: Expression, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
+        name = possiblyBindingIdentifier(name);
+        return { kind: SyntaxKind.JoinClause, await, name, expression: toAssignmentExpressionOrHigher(expression), outerKeySelector: toAssignmentExpressionOrHigher(outerKeySelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
     }
-    export function LetClause(outerClause: QueryBodyClause, name: BindingName, expression: Expression): LetClause {
-        return { kind: SyntaxKind.LetClause, outerClause, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    export function LetClause(name: RangeBinding, expression: Expression): LetClause {
+        return { kind: SyntaxKind.LetClause, name, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
-    export function WhereClause(outerClause: QueryBodyClause, expression: Expression): WhereClause {
-        return { kind: SyntaxKind.WhereClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
+    export function WhereClause(expression: Expression): WhereClause {
+        return { kind: SyntaxKind.WhereClause, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
-    export function OrderbyClause(outerClause: QueryBodyClause, comparators: ReadonlyArray<OrderbyComparator>): OrderbyClause {
-        return { kind: SyntaxKind.OrderbyClause, outerClause, comparators, [Syntax.location]: noTextRange };
+    export function OrderbyClause(comparators: ReadonlyArray<OrderbyComparator>): OrderbyClause {
+        return { kind: SyntaxKind.OrderbyClause, comparators, [Syntax.location]: noTextRange };
     }
-    export function OrderbyComparator(expression: Expression, direction: Token.DirectionKeyword | undefined, usingExpression: Expression | undefined): OrderbyComparator {
-        return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), direction, usingExpression: usingExpression && toAssignmentExpressionOrHigher(usingExpression), [Syntax.location]: noTextRange };
+    export function OrderbyComparator(expression: Expression, direction: Token.DirectionKeyword | undefined): OrderbyComparator {
+        return { kind: SyntaxKind.OrderbyComparator, expression: toAssignmentExpressionOrHigher(expression), direction, [Syntax.location]: noTextRange };
     }
-    export function GroupClause(outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingName | undefined): GroupClause {
-        return { kind: SyntaxKind.GroupClause, outerClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
+    export function GroupClause(elementSelector: Expression, keySelector: Expression): GroupClause {
+        return { kind: SyntaxKind.GroupClause, elementSelector: toAssignmentExpressionOrHigher(elementSelector), keySelector: toAssignmentExpressionOrHigher(keySelector), [Syntax.location]: noTextRange };
     }
-    export function JoinClause(outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
-        return { kind: SyntaxKind.JoinClause, outerClause, sequenceBinding, outerKeySelector: toAssignmentExpressionOrHigher(outerKeySelector), keySelector: toAssignmentExpressionOrHigher(keySelector), into, [Syntax.location]: noTextRange };
-    }
-    export function SelectClause(outerClause: QueryBodyClause, expression: Expression, into: BindingName | undefined): SelectClause {
-        return { kind: SyntaxKind.SelectClause, outerClause, expression: toAssignmentExpressionOrHigher(expression), into, [Syntax.location]: noTextRange };
-    }
-    export function Query(query: SelectOrGroupClause): QueryExpression {
-        if (query.kind !== SyntaxKind.SelectClause &&
-            query.kind !== SyntaxKind.GroupClause ||
-            query.into) return assertFail("A query must end with either a 'select' or 'group' clause.");
-        return { kind: SyntaxKind.QueryExpression, query, [Syntax.location]: noTextRange };
+    export function SelectClause(expression: Expression): SelectClause {
+        return { kind: SyntaxKind.SelectClause, expression: toAssignmentExpressionOrHigher(expression), [Syntax.location]: noTextRange };
     }
     export function Block(statements: ReadonlyArray<Statement | Expression>): Block {
         return { kind: SyntaxKind.Block, statements: visitList(statements, toStatement), [Syntax.location]: noTextRange };
@@ -480,35 +481,38 @@ export namespace SyntaxUpdate {
     export function Comma(node: CommaListExpression, expressions: ReadonlyArray<Expression>): CommaListExpression {
         return node.expressions !== expressions ? assignLocation(Syntax.CommaList(expressions), node) : node;
     }
-    export function SequenceBinding(node: SequenceBinding, name: BindingName | string, expression: Expression): SequenceBinding {
-        return node.name !== name || node.expression !== expression ? assignLocation(Syntax.SequenceBinding(node.await, name, expression), node) : node;
+    export function Query(node: QueryExpression, fromClause: FromClause, queryBody: QueryBody): QueryExpression {
+        return node.fromClause !== fromClause || node.queryBody !== queryBody ? assignLocation(Syntax.Query(fromClause, queryBody), node) : node;
     }
-    export function FromClause(node: FromClause, outerClause: QueryBodyClause | undefined, sequenceBinding: SequenceBinding): FromClause {
-        return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding ? assignLocation(Syntax.FromClause(outerClause, sequenceBinding), node) : node;
+    export function QueryBody(node: QueryBody, queryBodyClauses: ReadonlyArray<QueryBodyClause>, selectOrGroupClause: SelectOrGroupClause, queryContinuation: QueryContinuation | undefined): QueryBody {
+        return node.queryBodyClauses !== queryBodyClauses || node.selectOrGroupClause !== node.selectOrGroupClause || node.queryContinuation !== queryContinuation ? assignLocation(Syntax.QueryBody(queryBodyClauses, selectOrGroupClause, queryContinuation), node) : node;
     }
-    export function LetClause(node: LetClause, outerClause: QueryBodyClause, name: BindingName, expression: Expression): LetClause {
-        return node.outerClause !== outerClause || node.name !== name || node.expression !== expression ? assignLocation(Syntax.LetClause(outerClause, name, expression), node) : node;
+    export function QueryContinuation(node: QueryContinuation, name: RangeBinding, queryBody: QueryBody): QueryContinuation {
+        return node.name !== name || node.queryBody !== queryBody ? assignLocation(Syntax.QueryContinuation(name, queryBody), node) : node;
     }
-    export function WhereClause(node: WhereClause, outerClause: QueryBodyClause, expression: Expression): WhereClause {
-        return node.outerClause !== outerClause || node.expression !== expression ? assignLocation(Syntax.WhereClause(outerClause, expression), node) : node;
+    export function FromClause(node: FromClause, name: BindingName | string, expression: Expression): FromClause {
+        return node.name !== name || node.expression !== expression ? assignLocation(Syntax.FromClause(node.await, name, expression), node) : node;
     }
-    export function OrderbyClause(node: OrderbyClause, outerClause: QueryBodyClause, comparators: OrderbyClause["comparators"]): OrderbyClause {
-        return node.outerClause !== outerClause || node.comparators !== comparators ? assignLocation(Syntax.OrderbyClause(outerClause, comparators), node) : node;
+    export function JoinClause(node: JoinClause, name: BindingName | string, expression: Expression, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
+        return node.name !== name || node.expression !== expression || node.outerKeySelector !== outerKeySelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.JoinClause(node.await, name, expression, outerKeySelector, keySelector, into), node) : node;
     }
-    export function OrderbyComparator(node: OrderbyComparator, expression: Expression, usingExpression: Expression | undefined): OrderbyComparator {
-        return node.expression !== expression || node.usingExpression !== usingExpression ? assignLocation(Syntax.OrderbyComparator(expression, node.direction, usingExpression), node) : node;
+    export function LetClause(node: LetClause, name: BindingName, expression: Expression): LetClause {
+        return node.name !== name || node.expression !== expression ? assignLocation(Syntax.LetClause(name, expression), node) : node;
     }
-    export function GroupClause(node: GroupClause, outerClause: QueryBodyClause, elementSelector: Expression, keySelector: Expression, into: BindingName | undefined): GroupClause {
-        return node.outerClause !== outerClause || node.elementSelector !== elementSelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.GroupClause(outerClause, elementSelector, keySelector, into), node) : node;
+    export function WhereClause(node: WhereClause, expression: Expression): WhereClause {
+        return node.expression !== expression ? assignLocation(Syntax.WhereClause(expression), node) : node;
     }
-    export function JoinClause(node: JoinClause, outerClause: QueryBodyClause, sequenceBinding: SequenceBinding, outerKeySelector: Expression, keySelector: Expression, into: BindingName | undefined): JoinClause {
-        return node.outerClause !== outerClause || node.sequenceBinding !== sequenceBinding || node.outerKeySelector !== outerKeySelector || node.keySelector !== keySelector || node.into !== into ? assignLocation(Syntax.JoinClause(outerClause, sequenceBinding, outerKeySelector, keySelector, into), node) : node;
+    export function OrderbyClause(node: OrderbyClause, comparators: OrderbyClause["comparators"]): OrderbyClause {
+        return node.comparators !== comparators ? assignLocation(Syntax.OrderbyClause(comparators), node) : node;
     }
-    export function SelectClause(node: SelectClause, outerClause: QueryBodyClause, expression: Expression, into: BindingName | undefined): SelectClause {
-        return node.outerClause !== outerClause || node.expression !== expression || node.into !== into ? assignLocation(Syntax.SelectClause(outerClause, expression, into), node) : node;
+    export function OrderbyComparator(node: OrderbyComparator, expression: Expression): OrderbyComparator {
+        return node.expression !== expression ? assignLocation(Syntax.OrderbyComparator(expression, node.direction), node) : node;
     }
-    export function Query(node: QueryExpression, query: GroupClause | SelectClause): QueryExpression {
-        return node.query !== query ? assignLocation(Syntax.Query(query), node) : node;
+    export function GroupClause(node: GroupClause, elementSelector: Expression, keySelector: Expression): GroupClause {
+        return node.elementSelector !== elementSelector || node.keySelector !== keySelector ? assignLocation(Syntax.GroupClause(elementSelector, keySelector), node) : node;
+    }
+    export function SelectClause(node: SelectClause, expression: Expression): SelectClause {
+        return node.expression !== expression ? assignLocation(Syntax.SelectClause(expression), node) : node;
     }
     export function Block(node: Block, statements: ReadonlyArray<Statement | Expression>): Block {
         return node.statements !== statements ? assignLocation(Syntax.Block(statements), node) : node;
@@ -957,150 +961,168 @@ export interface ConditionalExpression extends Syntax {
     readonly whenFalse: AssignmentExpressionOrHigher;
 }
 
-// SequenceBinding[Await] :
-//     BindingIdentifier[?Await] `in` AssignmentExpression[+In, ?Await]
-//     [+Await] `await` BindingIdentifier[+Await] `in` AssignmentExpression[+In, ?Await]
-export interface SequenceBinding extends Syntax {
-    readonly kind: SyntaxKind.SequenceBinding;
-    readonly await: boolean;
-    readonly name: BindingName;
-    readonly expression: AssignmentExpressionOrHigher;
+//  RangeBinding :
+//      BindingIdentifier[~Yield, ~Await]
+//      BindingPattern[~Yield, ~Await]
+export type RangeBinding =
+    | BindingIdentifier
+    | BindingPattern;
+
+//  QueryExpression :
+//      FromClause QueryBody
+export interface QueryExpression extends Syntax {
+    readonly kind: SyntaxKind.QueryExpression;
+    readonly fromClause: FromClause;
+    readonly queryBody: QueryBody;
 }
 
-// FromClause[Await] :
-//     `from` SequenceBinding[?Await]
-export interface FromClause extends Syntax {
-    readonly kind: SyntaxKind.FromClause;
-    readonly outerClause: QueryBodyClause | undefined;
-    readonly sequenceBinding: SequenceBinding;
+//  QueryBody :
+//      QueryBodyClauses? SelectOrGroupClause QueryContinuation?
+export interface QueryBody extends Syntax {
+    readonly kind: SyntaxKind.QueryBody;
+    readonly queryBodyClauses: ReadonlyArray<QueryBodyClause>;
+    readonly selectOrGroupClause: SelectOrGroupClause;
+    readonly queryContinuation: QueryContinuation | undefined;
 }
 
-// LetClause[Await] :
-//     `let` BindingIdentifier[?Await] `=` AssignmentExpression[+In, ?Await]
-export interface LetClause extends Syntax {
-    readonly kind: SyntaxKind.LetClause;
-    readonly outerClause: QueryBodyClause;
-    readonly name: BindingName;
-    readonly expression: AssignmentExpressionOrHigher;
-}
-
-// WhereClause[Await] :
-//     `where` AssignmentExpression[+In, ?Await]
-export interface WhereClause extends Syntax {
-    readonly kind: SyntaxKind.WhereClause;
-    readonly outerClause: QueryBodyClause;
-    readonly expression: AssignmentExpressionOrHigher;
-}
-
-// OrderbyClause[Await] :
-//     `orderby` OrderbyComparatorList[?Await]
-export interface OrderbyClause extends Syntax {
-    readonly kind: SyntaxKind.OrderbyClause;
-    readonly outerClause: QueryBodyClause;
-    readonly comparators: ReadonlyArray<OrderbyComparator>;
-}
-
-// OrderbyComparatorList[Await] :
-//     OrderbyComparator[?Await]
-//     OrderbyComparatorList[?Await] `,` OrderbyComparator[?Await]
+//  QueryBodyClauses :
+//      QueryBodyClause
+//      QueryBodyClauses QueryBodyClause
 //
-// DirectionKeyword :
-//     `ascending`
-//     `descending`
-//
-// OrderbyComparator[Await] :
-//     AssignmentExpression[+In, ?Await] DirectionKeyword?
-//     AssignmentExpression[+In, ?Await] DirectionKeyword? `using` AssignmentExpression[+In, ?Await]
-export interface OrderbyComparator extends Syntax {
-    readonly kind: SyntaxKind.OrderbyComparator;
-    readonly expression: AssignmentExpressionOrHigher;
-    readonly direction: Token.DirectionKeyword | undefined;
-    readonly usingExpression: AssignmentExpressionOrHigher | undefined;
-}
-
-// GroupClause[Await] :
-//     `group` AssignmentExpression[+In, ?Await] `by` AssignmentExpression[+In, ?Await]
-export interface GroupClause extends Syntax {
-    readonly kind: SyntaxKind.GroupClause;
-    readonly outerClause: QueryBodyClause;
-    readonly elementSelector: AssignmentExpressionOrHigher;
-    readonly keySelector: AssignmentExpressionOrHigher;
-    readonly into: BindingName | undefined;
-}
-
-// JoinClause[Await] :
-//     `join` SequenceBinding[?Await] `on` AssignmentExpression[+In, ?Await] `equals` AssignmentExpression[+In, ?Await]
-//     `join` SequenceBinding[?Await] `on` AssignmentExpression[+In, ?Await] `equals` AssignmentExpression[+In, ?Await] `into` BindingIdentifier[?Await]
-export interface JoinClause extends Syntax {
-    readonly kind: SyntaxKind.JoinClause;
-    readonly outerClause: QueryBodyClause;
-    readonly sequenceBinding: SequenceBinding;
-    readonly outerKeySelector: AssignmentExpressionOrHigher;
-    readonly keySelector: AssignmentExpressionOrHigher;
-    readonly into: BindingName | undefined;
-}
-
-// SelectClause[Await] :
-//     `select` AssignmentExpression[+In, ?Await]
-export interface SelectClause extends Syntax {
-    readonly kind: SyntaxKind.SelectClause;
-    readonly outerClause: QueryBodyClause;
-    readonly expression: AssignmentExpressionOrHigher;
-    readonly into: BindingName | undefined;
-}
-
-// QueryBodyClauses[Await] :
-//     QueryBodyClause[?Await]
-//     QueryBodyClauses[?Await] QueryBodyClause[?Await]
-//
-// QueryBodyClause[Await] :
-//     FromClause[Await]
-//     LetClause[Await]
-//     WhereClause[Await]
-//     JoinClause[Await]
-//     OrderbyClause[Await]
+//  QueryBodyClause :
+//      FromClause
+//      JoinClause
+//      LetClause
+//      WhereClause
+//      OrderbyClause
 export type QueryBodyClause =
     | FromClause
+    | JoinClause
     | LetClause
     | WhereClause
-    | OrderbyClause
-    | GroupClause
-    | JoinClause
-    | SelectClause;
-
-// SelectOrGroupClause[Await] :
-//     SelectClause[?Await]
-//     GroupClause[?Await]
-export type SelectOrGroupClause =
-    | GroupClause
-    | SelectClause;
+    | OrderbyClause;
 
 export function isQueryBodyClause(node: Node): node is QueryBodyClause {
     switch (node.kind) {
         case SyntaxKind.FromClause:
+        case SyntaxKind.JoinClause:
         case SyntaxKind.LetClause:
         case SyntaxKind.WhereClause:
         case SyntaxKind.OrderbyClause:
-        case SyntaxKind.GroupClause:
-        case SyntaxKind.JoinClause:
-        case SyntaxKind.SelectClause:
             return true;
         default:
             return false;
     }
 }
 
-// QueryExpression[Await] :
-//     FromClause[?Await] QueryBody[Await]
+//  SelectOrGroupClause :
+//      SelectClause
+//      GroupClause
+export type SelectOrGroupClause =
+    | GroupClause
+    | SelectClause;
+
+export function isSelectOrGroupClause(node: Node): node is SelectOrGroupClause {
+    switch (node.kind) {
+        case SyntaxKind.SelectClause:
+        case SyntaxKind.GroupClause:
+            return true;
+        default:
+            return false;
+    }
+}
+
+//  CoverElementAccessExpressionAndQueryExpressionHead[Yield, Await] :
+//      MemberExpression[?Yield, ?Await] ArrayLiteral[?Yield, ?Await]
+//      MemberExpression[?Yield, ?Await] [no LineTerminator here] ObjectBindingPattern[~Yield, ~Await]
+//      MemberExpression[?Yield, ?Await] [no LineTerminator here] BindingIdentifier[~Yield, ~Await]
+//      MemberExpression[?Yield, ?Await] [no LineTerminator here] `await` RangeBinding
+export interface CoverElementAccessExpressionAndQueryExpressionHead extends Syntax {
+    readonly kind: SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead;
+    readonly expression: LeftHandSideExpressionOrHigher;
+    readonly await: boolean;
+    readonly argument: ArrayLiteral | RangeBinding;
+}
+
+//  FromClause :
+//      `from` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await]
+//      CoverElementAccessExpressionAndQueryExpressionHead[~Yield, ~Await] `of` AssignmentExpression[+In, ~Yield, ~Await]
+export interface FromClause extends Syntax {
+    readonly kind: SyntaxKind.FromClause;
+    readonly await: boolean;
+    readonly name: RangeBinding;
+    readonly expression: AssignmentExpressionOrHigher;
+}
+
+//  JoinClause :
+//     `join` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await] `on` AssignmentExpression[+In, ~Yield, ~Await] `equals` AssignmentExpression[+In, ~Yield, ~Await]
+//     `join` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await] `on` AssignmentExpression[+In, ~Yield, ~Await] `equals` AssignmentExpression[+In, ~Yield, ~Await] `into` RangeBinding
+export interface JoinClause extends Syntax {
+    readonly kind: SyntaxKind.JoinClause;
+    readonly await: boolean;
+    readonly name: RangeBinding;
+    readonly expression: AssignmentExpressionOrHigher;
+    readonly outerKeySelector: AssignmentExpressionOrHigher;
+    readonly keySelector: AssignmentExpressionOrHigher;
+    readonly into: RangeBinding | undefined;
+}
+
+//  LetClause :
+//      `let` RangeBinding `=` AssignmentExpression[+In, ~Yield, ~Await]
+export interface LetClause extends Syntax {
+    readonly kind: SyntaxKind.LetClause;
+    readonly name: RangeBinding;
+    readonly expression: AssignmentExpressionOrHigher;
+}
+
+//  WhereClause :
+//      `where` AssignmentExpression[+In, ~Yield, ~Await]
+export interface WhereClause extends Syntax {
+    readonly kind: SyntaxKind.WhereClause;
+    readonly expression: AssignmentExpressionOrHigher;
+}
+
+//  OrderbyClause :
+//      `orderby` OrderbyComparatorList
+export interface OrderbyClause extends Syntax {
+    readonly kind: SyntaxKind.OrderbyClause;
+    readonly comparators: ReadonlyArray<OrderbyComparator>;
+}
+
+//  OrderbyComparatorList :
+//      OrderbyComparator
+//      OrderbyComparatorList `,` OrderbyComparator
 //
-// QueryBody[Await] :
-//     QueryBodyClauses[?Await]? SelectOrGroupClause[?Await] QueryContinuation[?Await]?
-//
-// QueryContinuation[Await] :
-//     `into` BindingIdentifier[+In, ?Await] QueryBody[?Await]
-export interface QueryExpression extends Syntax {
-    readonly kind: SyntaxKind.QueryExpression;
-    readonly query: SelectOrGroupClause;
+//  OrderbyComparator :
+//      AssignmentExpression[+In, ~Yield, ~Await] `ascending`?
+//      AssignmentExpression[+In, ~Yield, ~Await] `descending`
+export interface OrderbyComparator extends Syntax {
+    readonly kind: SyntaxKind.OrderbyComparator;
+    readonly expression: AssignmentExpressionOrHigher;
+    readonly direction: Token.DirectionKeyword | undefined;
+}
+
+//  GroupClause :
+//      `group` AssignmentExpression[+In, ~Yield, ~Await] `by` AssignmentExpression[+In, ~Yield, ~Await]
+export interface GroupClause extends Syntax {
+    readonly kind: SyntaxKind.GroupClause;
+    readonly elementSelector: AssignmentExpressionOrHigher;
+    readonly keySelector: AssignmentExpressionOrHigher;
+}
+
+//  SelectClause :
+//      `select` AssignmentExpression[+In, ~Yield, ~Await]
+export interface SelectClause extends Syntax {
+    readonly kind: SyntaxKind.SelectClause;
+    readonly expression: AssignmentExpressionOrHigher;
+}
+
+//  QueryContinuation :
+//      `into` RangeBinding QueryBody
+export interface QueryContinuation extends Syntax {
+    readonly kind: SyntaxKind.QueryContinuation;
+    readonly name: RangeBinding;
+    readonly queryBody: QueryBody;
 }
 
 export type Parameter = BindingElement;
@@ -1115,13 +1137,11 @@ export interface ArrowFunction extends Syntax {
 
 export type BinaryExpressionOrHigher =
     | UnaryExpressionOrHigher
-    | BinaryExpression
-    | CoverBinaryExpressionAndQueryExpressionHead;
+    | BinaryExpression;
 
 export function isBinaryExpressionOrHigher(node: Node): node is BinaryExpressionOrHigher {
     switch (node.kind) {
         case SyntaxKind.BinaryExpression:
-        case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
             return true;
         default:
             return isUnaryExpressionOrHigher(node);
@@ -1178,26 +1198,6 @@ export interface CoverParenthesizedExpressionAndArrowParameterList extends Synta
     readonly kind: SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList;
     readonly expression: Expression | undefined;
     readonly rest: BindingRestElement | undefined;
-}
-
-// CoverElementAccessExpressionAndQueryExpressionHead[Yield, Await] :
-//      `from` ArrayLiteral[?Yield, ?Await]
-//      `from` ObjectBindingPattern[?Yield, ?Await]
-//      `from` BindingIdentifier[?Yield, ?Await]
-//      [+Await] `from` `await` BindingName[?Yield, ?Await]
-export interface CoverElementAccessExpressionAndQueryExpressionHead extends Syntax {
-    readonly kind: SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead;
-    readonly expression: LeftHandSideExpressionOrHigher;
-    readonly await: boolean;
-    readonly argument: ArrayLiteral | BindingName;
-}
-
-// CoverBinaryExpressionAndQueryExpressionHead[Yield, Await] :
-//      RelationalExpression[Yield, Await] `in` AssignmentExpression[+In, ?Yield, ?Await]
-export interface CoverBinaryExpressionAndQueryExpressionHead extends Syntax {
-    readonly kind: SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead;
-    readonly left: CoverElementAccessExpressionAndQueryExpressionHead;
-    readonly right: AssignmentExpressionOrHigher;
 }
 
 export interface Block extends Syntax {
@@ -1260,7 +1260,8 @@ export type Node =
     | GroupClause
     | JoinClause
     | SelectClause
-    | SequenceBinding
+    | QueryBody
+    | QueryContinuation
 
     // Expressions
     | ThisExpression
@@ -1314,5 +1315,4 @@ export type Node =
     | CoverParenthesizedExpressionAndArrowParameterList
     | CoverInitializedName
     | CoverElementAccessExpressionAndQueryExpressionHead
-    | CoverBinaryExpressionAndQueryExpressionHead
     ;

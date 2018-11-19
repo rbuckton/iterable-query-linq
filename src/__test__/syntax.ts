@@ -3,7 +3,7 @@ import { Parser } from "../parser";
 import { SyntaxKind, ParenthesizedExpression, AssignmentExpression, ArrowFunction, Identifier } from "../syntax";
 import { UnrecoverableSyntaxError } from "../errors";
 import { ExpressionVisitor } from "../visitor";
-import { Emitter } from "../emitter";
+//import { Emitter } from "../emitter";
 
 describe("syntax", () => {
     it("object literal", () => {
@@ -52,10 +52,10 @@ describe("syntax", () => {
         expect(() => new Parser().parse(`from`)).to.not.throw();
     });
     it("refine cover for query", () => {
-        expect(new Emitter().emit(new Parser().parse(`from[x] in y === z`))).to.equal(`from[x] in y === z`);
-        expect(new Emitter().emit(new Parser().parse(`from[x] in y ? a : b`))).to.equal(`from[x] in y ? a : b`);
-        expect(() => new Parser().parse(`from[x] in y = a`)).to.throw(/Invalid left-hand side in assignment/);
-        expect(() => new Parser().parse(`from[x] in from y in z select y`)).to.throw(/Unexpected identifier/);
-        expect(() => new Parser().parse(`from[x] in y => z`)).to.throw(/Unexpected token/);
+        expect(() => new Parser().parse(`from[x] of y === z`)).to.throw(/'select' or 'group' expected/);
+        expect(() => new Parser().parse(`from[x] of y ? a : b`)).to.throw(/'select' or 'group' expected/);
+        expect(() => new Parser().parse(`from[x] of y = a`)).to.throw(/'select' or 'group' expected/);
+        expect(() => new Parser().parse(`from[x] of from y of z select y`)).to.throw(/'select' or 'group' expected/);
+        expect(() => new Parser().parse(`from[x] of y => z`)).to.throw(/'select' or 'group' expected/);
     });
 });

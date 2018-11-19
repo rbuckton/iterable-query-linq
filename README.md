@@ -12,7 +12,7 @@ npm install iterable-query-linq
 import { linq } from "iterable-query-linq";
 
 const q = linq`
-    from user in ${users}
+    from user of ${users}
     where user.name === "Alice"
     select user
 `;
@@ -24,12 +24,12 @@ A query must begin with a `from` clause, may consist of zero or more other claus
 
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     select user
 `
 
 linq`
-    from user in ${users}
+    from user of ${users}
     where user.active
     group user by user.role
 `
@@ -54,7 +54,7 @@ The `from` clause is used to bind an identifier to each element in an expression
 
 #### Basic usage
 ```
-from ID in SOURCE
+from ID of SOURCE
 ```
 
 ### Cartesian Joins
@@ -69,7 +69,7 @@ If _source_ is an async iterable, you must indicate async iteration using the `a
 #### Example
 ```ts
 linq.async`
-    from await symbol in ${asyncStockTicker}
+    from await symbol of ${asyncStockTicker}
     where symbol.name === "NASDAQ"
     select symbol.value
 `
@@ -78,12 +78,12 @@ linq.async`
 ## `join` Clause
 
 The `join` clause is used to define a one-to-one relationship between the elements two iterables. All joins
-are performed using an "equijoin" comparing the strict equality of the keys 
+are performed using an "equijoin" comparing the strict equality of the keys
 selected from the outer and inner iterables:
 
 #### Basic usage
 ```
-join INNER_ID in INNER_SOURCE on OUTER_KEY equals INNER_KEY
+join INNER_ID of INNER_SOURCE on OUTER_KEY equals INNER_KEY
 ```
 
 ## `join into` Clause
@@ -92,7 +92,7 @@ The `join into` clause is similar to the `join` clause except that it creates a 
 
 #### Basic usage
 ```
-join INNER_ID in INNER_SOURCE on OUTER_KEY equals INNER_KEY into ID
+join INNER_ID of INNER_SOURCE on OUTER_KEY equals INNER_KEY into ID
 ```
 
 ## `let` Clause
@@ -108,7 +108,7 @@ let ID = EXPRESSION
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     let fullName = user.firstName + " " + user.lastName
     select { username: user.username, fullName }
 `
@@ -126,7 +126,7 @@ where EXPRESSION
 #### Examples
 ```ts
 linq`
-    from x in ${numbers}
+    from x of ${numbers}
     where x > 10 && x < 20
     select x
 `
@@ -144,7 +144,7 @@ orderby EXPRESSION [ascending|descending] [, ...]
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     orderby user.lastName, user.firstName
     select user
 `
@@ -162,7 +162,7 @@ group ELEMENT by KEY
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     group user by user.role
 `
 ```
@@ -180,7 +180,7 @@ group ELEMENT by KEY into ID
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     group user by user.role into roleUsers
     orderby roleUsers.key
     select { role: roleUser.key, users: [...roleUsers] }
@@ -200,7 +200,7 @@ select EXPRESSION
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     select user.name
 `
 ```
@@ -218,7 +218,7 @@ select EXPRESSION into ID
 #### Examples
 ```ts
 linq`
-    from user in ${users}
+    from user of ${users}
     select user.name into name
     where name !== "Bob"
     select name
@@ -236,7 +236,7 @@ import { parseAndExecuteQuery, parseAndExecuteQueryAsync } from "iterable-query-
 
 const users = ...;
 const q = parseAndExecuteQuery(`
-    from user in users 
+    from user of users
     select user.name
 `, { users });
 
@@ -244,7 +244,7 @@ const q = parseAndExecuteQuery(`
 
 const asyncUsers = ...;
 const q = parseAndExecuteQueryAsync(`
-    from await user in users 
+    from await user of users
     select user.name
 `, { users: asyncUsers });
 ```
@@ -259,6 +259,6 @@ import { startLinqRepl } from "iterable-query-linq";
 const users = ...;
 startLinqRepl({ users });
 
-// > from user in users
+// > from user of users
 // ... select user.name
 ```

@@ -10,8 +10,8 @@ import {
     ObjectBindingPattern, ArrayBindingPattern, BindingProperty, AssignmentExpressionOrHigher,
     BindingRestProperty, ShorthandBindingProperty, ObjectAssignmentPattern, AssignmentProperty,
     ShorthandAssignmentProperty, ArrayAssignmentPattern, AssignmentElement, AssignmentRestElement,
-    AssignmentExpression, AssignmentRestProperty, SequenceBinding, ThisExpression, NullLiteral,
-    BooleanLiteral, Identifier, Block, LetStatement, ExpressionStatement, ReturnStatement,
+    AssignmentExpression, AssignmentRestProperty, ThisExpression, NullLiteral,
+    BooleanLiteral, Identifier, Block, LetStatement, ExpressionStatement, ReturnStatement, QueryBody, QueryContinuation,
 } from "./syntax";
 import { assertNever } from "./utils";
 import { Token } from "./tokens";
@@ -151,7 +151,8 @@ export class Emitter {
             case SyntaxKind.GroupClause: return this.emitGroupClause(node);
             case SyntaxKind.JoinClause: return this.emitJoinClause(node);
             case SyntaxKind.SelectClause: return this.emitSelectClause(node);
-            case SyntaxKind.SequenceBinding: return this.emitSequenceBinding(node);
+            case SyntaxKind.QueryBody: return this.emitQueryBody(node);
+            case SyntaxKind.QueryContinuation: return this.emitQueryContinuation(node);
 
             // Expressions
             case SyntaxKind.ThisExpression: return this.emitThisExpression(node);
@@ -205,7 +206,6 @@ export class Emitter {
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
             case SyntaxKind.CoverInitializedName:
             case SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead:
-            case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
                 throw new Error("Not supported");
 
             default:
@@ -246,69 +246,36 @@ export class Emitter {
 
     // Query Clauses
 
-    private emitSequenceBinding(node: SequenceBinding): void {
-        if (node.await) this.writeToken(Token.AwaitKeyword);
+    private emitQueryBody(node: QueryBody): void {
+        for (const clause of node.queryBodyClauses) {
+            this.writeNode(clause);
+            this.writeLine();
+        }
+        this.writeNode(node.selectOrGroupClause);
+        this.writeNode(node.queryContinuation);
+        this.writeLine();
+    }
+
+    private emitQueryContinuation(node: QueryContinuation): void {
+        this.writeToken(Token.IntoKeyword);
         this.writeNode(node.name);
-        this.writeToken(Token.InKeyword);
-        this.writeNode(node.expression);
+        this.writeNode(node.queryBody);
     }
 
     private emitFromClause(node: FromClause): void {
-        this.writeNode(node.outerClause);
         this.writeToken(Token.FromKeyword);
-        this.writeNode(node.sequenceBinding);
-        this.writeLine();
-    }
-
-    private emitLetClause(node: LetClause): void {
-        this.writeNode(node.outerClause);
-        this.writeToken(Token.LetKeyword);
+        if (node.await) this.writeToken(Token.AwaitKeyword);
         this.writeNode(node.name);
-        this.writeToken(Token.EqualsToken);
+        this.writeToken(Token.OfKeyword);
         this.writeNode(node.expression);
-        this.writeLine();
-    }
-
-    private emitWhereClause(node: WhereClause): void {
-        this.writeNode(node.outerClause);
-        this.writeToken(Token.WhereKeyword);
-        this.writeNode(node.expression);
-        this.writeLine();
-    }
-
-    private emitOrderbyClause(node: OrderbyClause): void {
-        this.writeNode(node.outerClause);
-        this.writeToken(Token.OrderbyKeyword);
-        this.writeNodeList(node.comparators, Token.CommaToken, true);
-        this.writeLine();
-    }
-
-    private emitOrderbyComparator(node: OrderbyComparator): void {
-        this.writeNode(node.expression);
-        if (node.direction !== undefined) this.writeToken(node.direction);
-        if (node.usingExpression) {
-            this.writeToken(Token.UsingKeyword);
-            this.writeNode(node.usingExpression);
-        }
-    }
-
-    private emitGroupClause(node: GroupClause): void {
-        this.writeNode(node.outerClause);
-        this.writeToken(Token.GroupKeyword);
-        this.writeNode(node.elementSelector);
-        this.writeToken(Token.ByKeyword);
-        this.writeNode(node.keySelector);
-        if (node.into) {
-            this.writeToken(Token.IntoKeyword);
-            this.writeNode(node.into);
-        }
-        this.writeLine();
     }
 
     private emitJoinClause(node: JoinClause): void {
-        this.writeNode(node.outerClause);
         this.writeToken(Token.JoinKeyword);
-        this.writeNode(node.sequenceBinding);
+        if (node.await) this.writeToken(Token.AwaitKeyword);
+        this.writeNode(node.name);
+        this.writeToken(Token.OfKeyword);
+        this.writeNode(node.expression);
         this.writeToken(Token.OnKeyword);
         this.writeNode(node.outerKeySelector);
         this.writeToken(Token.EqualsKeyword);
@@ -317,18 +284,40 @@ export class Emitter {
             this.writeToken(Token.IntoKeyword);
             this.writeNode(node.into);
         }
-        this.writeLine();
+    }
+
+    private emitLetClause(node: LetClause): void {
+        this.writeToken(Token.LetKeyword);
+        this.writeNode(node.name);
+        this.writeToken(Token.EqualsToken);
+        this.writeNode(node.expression);
+    }
+
+    private emitWhereClause(node: WhereClause): void {
+        this.writeToken(Token.WhereKeyword);
+        this.writeNode(node.expression);
+    }
+
+    private emitOrderbyClause(node: OrderbyClause): void {
+        this.writeToken(Token.OrderbyKeyword);
+        this.writeNodeList(node.comparators, Token.CommaToken, true);
+    }
+
+    private emitOrderbyComparator(node: OrderbyComparator): void {
+        this.writeNode(node.expression);
+        if (node.direction !== undefined) this.writeToken(node.direction);
+    }
+
+    private emitGroupClause(node: GroupClause): void {
+        this.writeToken(Token.GroupKeyword);
+        this.writeNode(node.elementSelector);
+        this.writeToken(Token.ByKeyword);
+        this.writeNode(node.keySelector);
     }
 
     private emitSelectClause(node: SelectClause): void {
-        this.writeNode(node.outerClause);
         this.writeToken(Token.SelectKeyword);
         this.writeNode(node.expression);
-        if (node.into) {
-            this.writeToken(Token.IntoKeyword);
-            this.writeNode(node.into);
-        }
-        this.writeLine();
     }
 
     // Expressions
@@ -442,7 +431,8 @@ export class Emitter {
     }
 
     private emitQueryExpression(node: QueryExpression): void {
-        this.writeNode(node.query);
+        this.writeNode(node.fromClause);
+        this.writeNode(node.queryBody);
     }
 
     private emitAssignmentExpression(node: AssignmentExpression): void {

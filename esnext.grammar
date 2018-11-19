@@ -1,0 +1,9 @@
+// NOTE: stubs for ecmascript grammar entries
+BindingIdentifier[Yield, Await] : [empty]
+BindingPattern[Yield, Await] : [empty]
+AssignmentExpression[In, Yield, Await] : [empty]
+MemberExpression[Yield, Await] : [empty]
+ArrayLiteral[Yield, Await] : [empty]
+ObjectBindingPattern[Yield, Await] : [empty]
+LineTerminator :: [empty]
+Expression[In, Yield, Await] : [empty]

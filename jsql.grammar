@@ -1,0 +1,85 @@
+@import "./esnext.grammar"
+
+QueryExpression :
+    FromClause QueryBody
+
+QueryBody :
+    QueryBodyClauses? SelectOrGroupClause QueryContinuation?
+
+QueryBodyClauses :
+    QueryBodyClause
+    QueryBodyClauses QueryBodyClause
+
+QueryBodyClause :
+    FromClause
+    JoinClause
+    LetClause
+    WhereClause
+    OrderbyClause
+
+SelectOrGroupClause :
+    SelectClause
+    GroupClause
+
+RangeBinding :
+    BindingIdentifier[~Yield, ~Await]
+    BindingPattern[~Yield, ~Await]
+
+QueryContinuation :
+    `into` RangeBinding QueryBody
+
+FromClause :
+    `from` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await]
+    CoverElementAccessExpressionAndQueryExpressionHead[~Yield, ~Await] `of` AssignmentExpression[+In, ~Yield, +Await]
+
+JoinClause :
+    `join` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await] `on` AssignmentExpression[+In, ~Yield, ~Await] `equals` AssignmentExpression[+In, ~Yield, ~Await]
+    `join` `await`? RangeBinding `of` AssignmentExpression[+In, ~Yield, ~Await] `on` AssignmentExpression[+In, ~Yield, ~Await] `equals` AssignmentExpression[+In, ~Yield, ~Await] `into` RangeBinding
+
+LetClause :
+    `let` RangeBinding `=` AssignmentExpression[+In, ~Yield, ~Await]
+
+WhereClause :
+    `where` AssignmentExpression[+In, ~Yield, ~Await]
+
+OrderbyClause :
+    `orderby` OrderbyComparatorList
+
+OrderbyComparatorList :
+    OrderbyComparator
+    OrderbyComparatorList `,` OrderbyComparator
+
+OrderbyComparator :
+    AssignmentExpression[+In, ~Yield, ~Await] `ascending`?
+    AssignmentExpression[+In, ~Yield, ~Await] `descending`
+
+GroupClause :
+    `group` AssignmentExpression[+In, ~Yield, ~Await] `by` AssignmentExpression[+In, ~Yield, ~Await]
+
+SelectClause :
+    `select` AssignmentExpression[+In, ~Yield, ~Await]
+
+CoverElementAccessExpressionAndQueryExpressionHead[Yield, Await] :
+    MemberExpression[?Yield, ?Await] ArrayLiteral[?Yield, ?Await]
+    MemberExpression[?Yield, ?Await] [no LineTerminator here] ObjectBindingPattern[~Yield, ~Await]
+    MemberExpression[?Yield, ?Await] [no LineTerminator here] BindingIdentifier[~Yield, ~Await]
+    MemberExpression[?Yield, ?Await] [no LineTerminator here] `await` RangeBinding
+
+MemberExpression[Yield, Await] :
+    <del>MemberExpression[?Yield, ?Await] `[` Expression[+In, ?Yield, ?Await] `]`</del>
+    <ins>CoverElementAccessExpressionAndQueryExpressionHead[?Yield, ?Await]</ins>
+
+AssignmentExpression[In, Yield, Await] :
+    <ins>QueryExpression</ins>
+
+// When processing an instance of the production "MemberExpression : CoverElementAccessExpressionAndQueryExpressionHead", the interpretation of 
+// |CoverElementAccessExpressionAndQueryExpressionHead| is refined using the following grammar:
+
+MemberExpression[Yield, Await] :
+    MemberExpression[?Yield, ?Await] `[` Expression[+In, ?Yield, ?Await] `]`
+
+// When processing an instance of the production "FromClause : CoverElementAccessExpressionAndQueryExpressionHead `of` AssignmentExpression",
+// the interpretation of |CoverElementAccessExpressionAndQueryExpressionHead| is refined using the following grammar:
+
+QueryExpressionHead :
+    `from` `await`? RangeBinding

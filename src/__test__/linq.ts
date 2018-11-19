@@ -15,7 +15,7 @@ describe("linq", () => {
     it("nested", () => {
         const q = linq`
             (
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 select x
             ).reverse()
         `;
@@ -23,33 +23,33 @@ describe("linq", () => {
     });
     it("cross join", () => {
         const q = linq`
-            from x in [1, 2]
-            from s in ["a", "b"]
+            from x of [1, 2]
+            from s of ["a", "b"]
             select { x, s }
         `;
         expectSequence(q, [{ x: 1, s: "a" }, { x: 1, s: "b" }, { x: 2, s: "a" }, { x: 2, s: "b" }]);
     });
     it("select many", () => {
         const q = linq`
-            from x in [[1, 2], ["a", "b"]]
-            from y in x
+            from x of [[1, 2], ["a", "b"]]
+            from y of x
             select { x, y }
         `;
         expectSequence(q, [{ x: [1, 2], y: 1 }, { x: [1, 2], y: 2 }, { x: ["a", "b"], y: "a" }, { x: ["a", "b"], y: "b" }]);
     });
     it("flatten group", () => {
         const q = linq`
-            from x in [{ a: 1, b: 2 }, { a: 1, b: 3 }]
+            from x of [{ a: 1, b: 2 }, { a: 1, b: 3 }]
             group x by x.a into g
-            from x in g
+            from x of g
             select { k: g.key, b: x.b }
         `;
         expectSequence(q, [{ k: 1, b: 2 }, { k: 1, b: 3 }]);
     });
     it("from from", () => {
         const q = linq`
-            from x in 
-                from y in [1, 2, 3] 
+            from x of
+                from y of [1, 2, 3]
                 select y
             select x
         `;
@@ -57,23 +57,23 @@ describe("linq", () => {
     });
 
     describe("FromClause :", () => {
-        it("`from` BindingIdentifier `in` AssignmentExpression", () => {
+        it("`from` BindingIdentifier `of` AssignmentExpression", () => {
             const q = linq`
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 select x
             `;
             expectSequence(q, [1, 2, 3]);
         });
-        it("`from` BindingPattern `in` AssignmentExpression", () => {
+        it("`from` BindingPattern `of` AssignmentExpression", () => {
             const q = linq`
-                from { x } in ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
+                from { x } of ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
                 select x
             `;
             expectSequence(q, [1, 2, 3]);
         });
-        it("`from` `await` BindingIdentifier `in` AssignmentExpression", async () => {
+        it("`from` `await` BindingIdentifier `of` AssignmentExpression", async () => {
             const q = linq.async`
-                from await x in ${[1, Promise.resolve(2), 3]}
+                from await x of ${[1, Promise.resolve(2), 3]}
                 select x
             `;
             expectSequenceAsync(q, [1, 2, 3]);
@@ -83,7 +83,7 @@ describe("linq", () => {
     describe("LetClause :", () => {
         it("Clause `let` BindingIdentifier `=` AssignmentExpression", () => {
             const q = linq`
-                from x in [1, 2, 3]
+                from x of [1, 2, 3]
                 let y = x + 1
                 select y
             `;
@@ -91,7 +91,7 @@ describe("linq", () => {
         });
         it("Clause `let` BindingName `=` AssignmentExpression", () => {
             const q = linq`
-                from { x } in ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
+                from { x } of ${[{ x: 1 }, { x: 2 }, { x: 3 }]}
                 let y = x + 1
                 select y
             `;
@@ -99,7 +99,7 @@ describe("linq", () => {
         });
         it("[+Await] Clause `let` BindingIdentifier `=` AssignmentExpression", async () => {
             const q = linq.async`
-                from await x in ${[1, Promise.resolve(2), 3]}
+                from await x of ${[1, Promise.resolve(2), 3]}
                 let y = x + 1
                 select y
             `;
@@ -110,7 +110,7 @@ describe("linq", () => {
     describe("WhereClause :", () => {
         it("Clause `where` AssignmentExpression", () => {
             const q = linq`
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 where x % 2 === 1
                 select x
             `;
@@ -118,7 +118,7 @@ describe("linq", () => {
         });
         it("[+Await] Clause `where` AssignmentExpression", async () => {
             const q = linq.async`
-                from x in ${[1, Promise.resolve(2), 3]}
+                from x of ${[1, Promise.resolve(2), 3]}
                 where x % 2 === 1
                 select x
             `;
@@ -129,7 +129,7 @@ describe("linq", () => {
     describe("OrderbyClause :", () => {
         it("Clause `orderby` AssignmentExpression", () => {
             const q = linq`
-                from x in ${[3, 1, 2]}
+                from x of ${[3, 1, 2]}
                 orderby x
                 select x
             `;
@@ -137,7 +137,7 @@ describe("linq", () => {
         });
         it("Clause `orderby` AssignmentExpression `ascending`", () => {
             const q = linq`
-                from x in ${[3, 1, 2]}
+                from x of ${[3, 1, 2]}
                 orderby x ascending
                 select x
             `;
@@ -145,23 +145,15 @@ describe("linq", () => {
         });
         it("Clause `orderby` AssignmentExpression `descending`", () => {
             const q = linq`
-                from x in ${[3, 1, 2]}
+                from x of ${[3, 1, 2]}
                 orderby x descending
-                select x
-            `;
-            expectSequence(q, [3, 2, 1]);
-        });
-        it("Clause `orderby` AssignmentExpression `using` AssignmentExpression", () => {
-            const q = linq`
-                from x in ${[3, 1, 2]}
-                orderby x using ${(a: number, b: number) => b - a}
                 select x
             `;
             expectSequence(q, [3, 2, 1]);
         });
         it("Clause `orderby` OrderbyComparator `,` OrderbyComparator", () => {
             const q = linq`
-                from x in ${["ab", "ac", "aa", "ba"]}
+                from x of ${["ab", "ac", "aa", "ba"]}
                 orderby x[0], x[1] descending
                 select x
             `;
@@ -172,7 +164,7 @@ describe("linq", () => {
     describe("GroupClause[Into] :", () => {
         it("[~Into] Clause `group` AssignmentExpression `by` AssignmentExpression", () => {
             const q = linq`
-                from u in ${users.users}
+                from u of ${users.users}
                 group u.name by u.role
             `;
             expectSequence(q, [
@@ -182,7 +174,7 @@ describe("linq", () => {
         });
         it("[+Into] Clause `group` AssignmentExpression `by` AssignmentExpression `into` BindingIdentifier", () => {
             const q = linq`
-                from u in ${users.users}
+                from u of ${users.users}
                 group u.name by u.role into names
                 select { role: names.key, names: [...names] }
             `;
@@ -193,7 +185,7 @@ describe("linq", () => {
         });
         it("[+Into] Clause `group` AssignmentExpression `by` AssignmentExpression `into` BindingPattern", () => {
             const q = linq`
-                from u in ${users.users}
+                from u of ${users.users}
                 group u.name by u.role into { key, values: [name, ...names] }
                 select { role: key, first: name, rest: [...names] }
             `;
@@ -205,10 +197,10 @@ describe("linq", () => {
     });
 
     describe("JoinClause[Into] :", () => {
-        it("Clause `join` BindingIdentifier `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", () => {
+        it("Clause `join` BindingIdentifier `of` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", () => {
             const q = linq`
-                from role in ${users.roles}
-                join user in ${users.users} on role.name equals user.role
+                from role of ${users.roles}
+                join user of ${users.users} on role.name equals user.role
                 select { role, user }
             `;
             expectSequence(q, [
@@ -217,10 +209,10 @@ describe("linq", () => {
                 { role: users.userRole, user: users.daveUser }
             ]);
         });
-        it("[+Into] Clause `join` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", () => {
+        it("[+Into] Clause `join` SequenceBinding `of` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", () => {
             const q = linq`
-                from role in ${users.roles}
-                join user in ${users.users} on role.name equals user.role into users
+                from role of ${users.roles}
+                join user of ${users.users} on role.name equals user.role into users
                 select { role, users: [...users] }
             `;
             expectSequence(q, [
@@ -229,10 +221,10 @@ describe("linq", () => {
                 { role: users.guestRole, users: [] }
             ]);
         });
-        it("[+Into] Clause `join` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingPattern", () => {
+        it("[+Into] Clause `join` SequenceBinding `of` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingPattern", () => {
             const q = linq`
-                from role in ${users.roles}
-                join user in ${users.users} on role.name equals user.role into [user, ...users]
+                from role of ${users.roles}
+                join user of ${users.users} on role.name equals user.role into [user, ...users]
                 select { role, first: user, rest: [...users] }
             `;
             expectSequence(q, [
@@ -241,10 +233,10 @@ describe("linq", () => {
                 { role: users.guestRole, first: undefined, rest: [] }
             ]);
         });
-        it("Clause `join` `await` BindingIdentifier `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
+        it("Clause `join` `await` BindingIdentifier `of` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression", async () => {
             const q = linq.async`
-                from role in ${users.roles}
-                join await user in ${users.users.map(x => Promise.resolve(x))} on role.name equals user.role
+                from role of ${users.roles}
+                join await user of ${users.users.map(x => Promise.resolve(x))} on role.name equals user.role
                 select { role, user }
             `;
             await expectSequenceAsync(q, [
@@ -253,10 +245,10 @@ describe("linq", () => {
                 { role: users.userRole, user: users.daveUser }
             ]);
         });
-        it("[+Into] Clause `join` `await` SequenceBinding `in` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", async () => {
+        it("[+Into] Clause `join` `await` SequenceBinding `of` AssignmentExpression `on` AssignmentExpression `equals` AssignmentExpression `into` BindingIdentifier", async () => {
             const q = linq.async`
-                from role in ${users.roles}
-                join await user in ${users.users.map(x => Promise.resolve(x))} on role.name equals user.role into users
+                from role of ${users.roles}
+                join await user of ${users.users.map(x => Promise.resolve(x))} on role.name equals user.role into users
                 select { role, users: [...users] }
             `;
             await expectSequenceAsync(q, [
@@ -270,14 +262,14 @@ describe("linq", () => {
     describe("SelectClause[Into] :", () => {
         it("[~Into] Clause `select` AssignmentExpression", () => {
             const q = linq`
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 select x + 1
             `;
             expectSequence(q, [2, 3, 4]);
         });
         it("[+Into] Clause `select` AssignmentExpression `into` BindingIdentifier", () => {
             const q = linq`
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 select x + 1 into y
                 select y
             `;
@@ -285,7 +277,7 @@ describe("linq", () => {
         });
         it("[+Into] Clause `select` AssignmentExpression `into` BindingPattern", () => {
             const q = linq`
-                from x in ${[1, 2, 3]}
+                from x of ${[1, 2, 3]}
                 select { y: x + 1 } into { y }
                 select y
             `;

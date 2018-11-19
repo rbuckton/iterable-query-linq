@@ -3,11 +3,11 @@ import {
     QueryBodyClause, SyntaxKind, QueryExpression, BinaryExpression, ConditionalExpression,
     PrefixUnaryExpression, PostfixUnaryExpression, ArrowFunction, PropertyAccessExpression,
     ElementAccessExpression, ObjectLiteral, ArrayLiteral, PropertyDefinition, ObjectLiteralElement,
-    SpreadElement, ArrayLiteralElement, PropertyName, ComputedPropertyName, 
+    SpreadElement, ArrayLiteralElement, PropertyName, ComputedPropertyName,
     CommaListExpression, ParenthesizedExpression, NewExpression, CallExpression, Argument,
-    ShorthandPropertyDefinition, 
+    ShorthandPropertyDefinition,
     SyntaxUpdate,
-    Expression, 
+    Expression,
     ObjectAssignmentPatternElement,
     ObjectBindingPatternElement, ArrayBindingPatternElement, ArrayAssignmentPatternElement,
     BindingName, OrderbyComparator,
@@ -17,8 +17,8 @@ import {
     ArrayAssignmentPattern, ObjectBindingPattern, BindingRestProperty, BindingProperty,
     ShorthandBindingProperty, AssignmentRestProperty, AssignmentProperty,
     ShorthandAssignmentProperty, ArrayBindingPattern, BindingElement, BindingRestElement,
-    AssignmentElement, AssignmentRestElement, SequenceBinding, IdentifierReference, 
-    isAssignmentExpressionOrHigher, isLeftHandSideExpressionOrHigher, Node, Statement, Block, LetStatement, ExpressionStatement, ReturnStatement,
+    AssignmentElement, AssignmentRestElement, IdentifierReference,
+    isAssignmentExpressionOrHigher, isLeftHandSideExpressionOrHigher, Node, Statement, Block, LetStatement, ExpressionStatement, ReturnStatement, QueryBody, QueryContinuation, SelectOrGroupClause,
 } from "./syntax";
 import { assertFail, assertNever, visitList } from "./utils";
 
@@ -74,10 +74,9 @@ export abstract class ExpressionVisitor {
             // Cover Grammars
             case SyntaxKind.CoverParenthesizedExpressionAndArrowParameterList:
             case SyntaxKind.CoverElementAccessExpressionAndQueryExpressionHead:
-            case SyntaxKind.CoverBinaryExpressionAndQueryExpressionHead:
             // case SyntaxKind.CoverInitializedName:
                 throw new Error("Not supported");
-            
+
             default: return assertNever(node);
         }
     }
@@ -91,80 +90,83 @@ export abstract class ExpressionVisitor {
 
     // Clauses
 
-    protected visitSequenceBinding(node: SequenceBinding): SequenceBinding {
-        return SyntaxUpdate.SequenceBinding(node,
-            node.name,
-            this.visit(node.expression));
+    protected visitQueryBody(node: QueryBody): QueryBody {
+        return SyntaxUpdate.QueryBody(node,
+            visitList(node.queryBodyClauses, this.visitQueryBodyClause, this),
+            this.visitSelectOrGroupClause(node.selectOrGroupClause),
+            node.queryContinuation && this.visitQueryContinuation(node.queryContinuation))
     }
 
-    protected visitQueryBodyClause(node: QueryBodyClause): QueryBodyClause;
-    protected visitQueryBodyClause(node: QueryBodyClause | undefined): QueryBodyClause | undefined;
-    protected visitQueryBodyClause(node: QueryBodyClause | undefined): QueryBodyClause | undefined {
-        if (node === undefined) return undefined;
+    protected visitQueryBodyClause(node: QueryBodyClause): QueryBodyClause {
         switch (node.kind) {
             case SyntaxKind.FromClause: return this.visitFromClause(node);
             case SyntaxKind.LetClause: return this.visitLetClause(node);
             case SyntaxKind.WhereClause: return this.visitWhereClause(node);
             case SyntaxKind.OrderbyClause: return this.visitOrderbyClause(node);
-            case SyntaxKind.GroupClause: return this.visitGroupClause(node);
             case SyntaxKind.JoinClause: return this.visitJoinClause(node);
+            default: return assertNever(node);
+        }
+    }
+
+    protected visitSelectOrGroupClause(node: SelectOrGroupClause): SelectOrGroupClause {
+        switch (node.kind) {
             case SyntaxKind.SelectClause: return this.visitSelectClause(node);
+            case SyntaxKind.GroupClause: return this.visitGroupClause(node);
+            default: return assertNever(node);
         }
     }
 
     protected visitFromClause(node: FromClause): FromClause {
         return SyntaxUpdate.FromClause(node,
-            this.visitQueryBodyClause(node.outerClause),
-            this.visitSequenceBinding(node.sequenceBinding));
+            this.visitBindingName(node.name),
+            this.visit(node.expression));
+    }
+
+    protected visitJoinClause(node: JoinClause): JoinClause {
+        return SyntaxUpdate.JoinClause(node,
+            this.visitBindingName(node.name),
+            this.visit(node.expression),
+            this.visit(node.outerKeySelector),
+            this.visit(node.keySelector),
+            node.into && this.visitBindingName(node.into));
     }
 
     protected visitLetClause(node: LetClause): LetClause {
         return SyntaxUpdate.LetClause(node,
-            this.visitQueryBodyClause(node.outerClause),
             this.visitBindingName(node.name),
             this.visit(node.expression));
     }
 
     protected visitWhereClause(node: WhereClause): WhereClause {
         return SyntaxUpdate.WhereClause(node,
-            this.visitQueryBodyClause(node.outerClause),
             this.visit(node.expression));
     }
 
     protected visitOrderbyClause(node: OrderbyClause): OrderbyClause {
         return SyntaxUpdate.OrderbyClause(node,
-            this.visitQueryBodyClause(node.outerClause),
             visitList(node.comparators, this.visitOrderbyComparator, this));
     }
 
     protected visitOrderbyComparator(node: OrderbyComparator): OrderbyComparator {
         return SyntaxUpdate.OrderbyComparator(node,
-            this.visit(node.expression),
-            node.usingExpression && this.visit(node.usingExpression));
+            this.visit(node.expression));
     }
 
     protected visitGroupClause(node: GroupClause): GroupClause {
         return SyntaxUpdate.GroupClause(node,
-            this.visitQueryBodyClause(node.outerClause),
             this.visit(node.elementSelector),
-            this.visit(node.keySelector),
-            node.into && this.visitBindingName(node.into));
-    }
-
-    protected visitJoinClause(node: JoinClause): JoinClause {
-        return SyntaxUpdate.JoinClause(node,
-            this.visitQueryBodyClause(node.outerClause),
-            this.visitSequenceBinding(node.sequenceBinding),
-            this.visit(node.outerKeySelector),
-            this.visit(node.keySelector),
-            node.into && this.visitBindingName(node.into));
+            this.visit(node.keySelector));
     }
 
     protected visitSelectClause(node: SelectClause): SelectClause {
         return SyntaxUpdate.SelectClause(node,
-            this.visitQueryBodyClause(node.outerClause),
-            this.visit(node.expression),
-            node.into && this.visitBindingName(node.into));
+            this.visit(node.expression));
+    }
+
+    protected visitQueryContinuation(node: QueryContinuation): QueryContinuation {
+        return SyntaxUpdate.QueryContinuation(node,
+            this.visitBindingName(node.name),
+            this.visitQueryBody(node.queryBody));
     }
 
     // Expressions - PrimaryExpression
@@ -328,11 +330,9 @@ export abstract class ExpressionVisitor {
     }
 
     protected visitQueryExpression(node: QueryExpression): Expression {
-        const clause = this.visitQueryBodyClause(node.query);
-        if (clause.kind !== SyntaxKind.SelectClause &&
-            clause.kind !== SyntaxKind.GroupClause ||
-            clause.into) return assertFail("A query must end with either a 'select' or 'group' clause.");
-        return SyntaxUpdate.Query(node, clause);
+        return SyntaxUpdate.Query(node,
+            this.visitFromClause(node.fromClause),
+            this.visitQueryBody(node.queryBody));
     }
 
     protected visitAssignmentExpression(node: AssignmentExpression): Expression {
